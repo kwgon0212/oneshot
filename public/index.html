@@ -25,12 +25,14 @@
   #canvas-wrap { flex: 1; position: relative; overflow: hidden; background: #000; }
   #canvas { width: 100%; height: 100%; object-fit: contain; cursor: default; display: block; }
 
-  /* Status Bar */
-  #status-bar { position: fixed; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-family: monospace; z-index: 100; display: none; }
-
-  /* Shutdown Button */
-  #shutdown-btn { position: fixed; top: 8px; left: 8px; background: rgba(180,40,40,0.8); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; z-index: 100; font-weight: 600; }
+  /* Top Bar */
+  #top-bar { position: fixed; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; align-items: center; z-index: 100; pointer-events: none; }
+  #top-bar > * { pointer-events: auto; }
+  #shutdown-btn { background: rgba(180,40,40,0.8); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 600; }
   #shutdown-btn:hover { background: rgba(220,50,50,0.9); }
+  #status-bar { background: rgba(0,0,0,0.7); color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-family: monospace; display: none; }
+  #toolbar-toggle { background: rgba(0,0,0,0.6); color: #ccc; border: 1px solid #555; border-radius: 6px; padding: 6px 10px; font-size: 16px; cursor: pointer; display: none; }
+  #toolbar-toggle.active { background: #4a9eff; color: #fff; border-color: #4a9eff; }
 
   /* Confirm Dialog */
   #confirm-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 300; align-items: center; justify-content: center; }
@@ -43,14 +45,14 @@
   #confirm-no { background: #444; color: #ddd; }
   #confirm-no:hover { background: #555; }
 
-  /* Mobile Toolbar — hidden by default, shown via JS based on UA */
-  #mobile-toolbar { display: none; background: #16213e; border-top: 1px solid #333; padding: 6px 8px; z-index: 50; }
-  #mobile-toolbar .toolbar-row { display: flex; gap: 6px; align-items: center; }
+  /* Mobile Toolbar */
+  #mobile-toolbar { display: none; background: #16213e; border-top: 1px solid #333; padding: 6px 8px; z-index: 50; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #mobile-toolbar.visible { display: block; }
+  #mobile-toolbar .toolbar-row { display: flex; gap: 6px; align-items: center; min-width: max-content; }
   #mobile-toolbar .toolbar-row + .toolbar-row { margin-top: 6px; }
   .tb-btn { background: #2a2a4a; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; font-size: 13px; font-family: monospace; cursor: pointer; white-space: nowrap; flex-shrink: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
   .tb-btn:active { background: #4a9eff; color: #fff; }
   .tb-btn.active { background: #4a9eff; color: #fff; border-color: #4a9eff; }
-  .tb-btn.wide { flex: 1; text-align: center; }
   .tb-sep { width: 1px; height: 28px; background: #444; flex-shrink: 0; }
   #hidden-input { position: fixed; left: -9999px; top: -9999px; opacity: 0; width: 1px; height: 1px; }
 
@@ -59,8 +61,6 @@
   .spinner { width: 40px; height: 40px; border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   #reconnect-msg { font-size: 16px; color: #ccc; }
-
-  body.is-mobile #mobile-toolbar { display: block; }
 </style>
 </head>
 <body>
@@ -81,11 +81,16 @@
   <div id="canvas-wrap">
     <canvas id="canvas"></canvas>
   </div>
-  <div id="status-bar">
-    <span id="fps-display">0 FPS</span> |
-    <span id="quality-display">Q:75</span>
+
+  <!-- Top Bar -->
+  <div id="top-bar">
+    <button id="shutdown-btn">종료</button>
+    <button id="toolbar-toggle">🛠</button>
+    <div id="status-bar">
+      <span id="fps-display">0 FPS</span> |
+      <span id="quality-display">Q:75</span>
+    </div>
   </div>
-  <button id="shutdown-btn">종료</button>
 
   <!-- Mobile Toolbar -->
   <div id="mobile-toolbar">
@@ -147,10 +152,12 @@
   var frameCount = 0;
   var lastFpsTime = Date.now();
   var showStatus = false;
-  var isMobile = /Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i.test(navigator.userAgent);
-  if (isMobile) document.body.classList.add('is-mobile');
+  var toolbarVisible = false;
   var rightClickMode = false;
   var stickyMods = { ctrl: false, alt: false, meta: false, shift: false };
+
+  // Detect touch device: maxTouchPoints works on all modern browsers including foldables
+  var hasTouch = (navigator.maxTouchPoints > 0);
 
   // --- Elements ---
   var loginScreen = document.getElementById('login-screen');
@@ -166,6 +173,17 @@
   var reconnectOverlay = document.getElementById('reconnect-overlay');
   var reconnectMsg = document.getElementById('reconnect-msg');
   var hiddenInput = document.getElementById('hidden-input');
+  var toolbarToggle = document.getElementById('toolbar-toggle');
+  var mobileToolbar = document.getElementById('mobile-toolbar');
+
+  // Show toolbar toggle button if device has touch
+  if (hasTouch) {
+    toolbarToggle.style.display = 'block';
+    // Auto-show toolbar on touch devices
+    toolbarVisible = true;
+    mobileToolbar.classList.add('visible');
+    toolbarToggle.classList.add('active');
+  }
 
   // --- Auth ---
   async function authenticate() {
@@ -331,6 +349,20 @@
     clearStickyMods();
   }
 
+  // --- Toolbar Toggle ---
+  function toggleToolbar(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    toolbarVisible = !toolbarVisible;
+    mobileToolbar.classList.toggle('visible', toolbarVisible);
+    toolbarToggle.classList.toggle('active', toolbarVisible);
+  }
+  toolbarToggle.addEventListener('click', toggleToolbar);
+  toolbarToggle.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleToolbar();
+  });
+
   // --- Input: Mouse (Desktop) ---
   var lastMoveTime = 0;
   canvas.addEventListener('mousemove', function(e) {
@@ -401,12 +433,11 @@
     sendInput({ type: 'key-up', key: e.key });
   });
 
-  // --- Input: Touch (Mobile) ---
+  // --- Input: Touch ---
   var touchStartPos = null;
-  var touchStartTime = 0;
   var touchMoved = false;
   var lastTouchMoveTime = 0;
-  var TOUCH_TAP_THRESHOLD = 10; // pixels
+  var TOUCH_TAP_THRESHOLD = 10;
 
   canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
@@ -414,9 +445,7 @@
       var touch = e.touches[0];
       var r = getCanvasRatio(touch);
       touchStartPos = { x: r.x, y: r.y, px: touch.clientX, py: touch.clientY };
-      touchStartTime = Date.now();
       touchMoved = false;
-      // Move cursor to position
       sendInput({ type: 'mouse-move', x: r.x, y: r.y });
     }
   }, { passive: false });
@@ -433,7 +462,6 @@
       var dy = Math.abs(touch.clientY - touchStartPos.py);
       if (dx > TOUCH_TAP_THRESHOLD || dy > TOUCH_TAP_THRESHOLD) {
         if (!touchMoved) {
-          // Drag started
           touchMoved = true;
           sendInput({ type: 'mouse-down', x: touchStartPos.x, y: touchStartPos.y, button: 'left' });
         }
@@ -441,7 +469,6 @@
         sendInput({ type: 'mouse-move', x: r.x, y: r.y });
       }
     } else if (e.touches.length === 2) {
-      // Pinch → scroll
       var t1 = e.touches[0];
       var t2 = e.touches[1];
       var dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
@@ -467,14 +494,12 @@
 
     if (touchStartPos) {
       if (touchMoved) {
-        // End drag
         var r = touchStartPos;
         if (e.changedTouches.length > 0) {
           r = getCanvasRatio(e.changedTouches[0]);
         }
         sendInput({ type: 'mouse-up', x: r.x, y: r.y, button: 'left' });
       } else {
-        // Tap — send click
         var btn = rightClickMode ? 'right' : 'left';
         sendInput({ type: 'mouse-click', x: touchStartPos.x, y: touchStartPos.y, button: btn });
         if (rightClickMode) {
@@ -494,7 +519,7 @@
       longPressTimer = setTimeout(function() {
         if (touchStartPos && !touchMoved) {
           sendInput({ type: 'mouse-click', x: touchStartPos.x, y: touchStartPos.y, button: 'right' });
-          touchStartPos = null; // Prevent tap on touchend
+          touchStartPos = null;
         }
       }, 600);
     }
@@ -508,9 +533,14 @@
     clearTimeout(longPressTimer);
   }, { passive: true });
 
-  // --- Mobile Toolbar ---
+  // --- Mobile Toolbar Buttons ---
 
   // Keyboard button
+  document.getElementById('tb-keyboard').addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    hiddenInput.focus();
+  });
   document.getElementById('tb-keyboard').addEventListener('touchstart', function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -518,10 +548,9 @@
   });
 
   // Hidden input captures mobile keyboard input
-  hiddenInput.addEventListener('input', function(e) {
+  hiddenInput.addEventListener('input', function() {
     var val = hiddenInput.value;
     if (val.length > 0) {
-      // Send each character
       for (var i = 0; i < val.length; i++) {
         sendKey(val[i]);
       }
@@ -530,7 +559,6 @@
   });
 
   hiddenInput.addEventListener('keydown', function(e) {
-    // Handle special keys from mobile keyboard
     if (['Backspace', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
       e.preventDefault();
       sendKey(e.key);
@@ -538,62 +566,58 @@
   });
 
   // Desktop switch buttons (Ctrl+Left / Ctrl+Right on macOS)
-  document.getElementById('tb-desk-left').addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
+  function addBtnHandler(id, handler) {
+    var el = document.getElementById(id);
+    el.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); handler(); });
+    el.addEventListener('touchstart', function(e) { e.preventDefault(); e.stopPropagation(); handler(); });
+  }
+
+  addBtnHandler('tb-desk-left', function() {
     sendInput({ type: 'key-down', key: 'ArrowLeft', modifiers: ['ctrl'] });
     sendInput({ type: 'key-up', key: 'ArrowLeft' });
   });
 
-  document.getElementById('tb-desk-right').addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
+  addBtnHandler('tb-desk-right', function() {
     sendInput({ type: 'key-down', key: 'ArrowRight', modifiers: ['ctrl'] });
     sendInput({ type: 'key-up', key: 'ArrowRight' });
   });
 
   // Right-click toggle
-  document.getElementById('tb-right-click').addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
+  addBtnHandler('tb-right-click', function() {
     rightClickMode = !rightClickMode;
-    this.classList.toggle('active', rightClickMode);
+    document.getElementById('tb-right-click').classList.toggle('active', rightClickMode);
   });
 
   // Special key buttons
   document.querySelectorAll('.tb-btn[data-key]').forEach(function(btn) {
-    btn.addEventListener('touchstart', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      sendKey(btn.getAttribute('data-key'));
-    });
+    function handler(e) { e.preventDefault(); e.stopPropagation(); sendKey(btn.getAttribute('data-key')); }
+    btn.addEventListener('click', handler);
+    btn.addEventListener('touchstart', handler);
   });
 
   // Sticky modifier buttons
   document.querySelectorAll('.tb-mod').forEach(function(btn) {
-    btn.addEventListener('touchstart', function(e) {
+    function handler(e) {
       e.preventDefault();
       e.stopPropagation();
       var mod = btn.getAttribute('data-mod');
       stickyMods[mod] = !stickyMods[mod];
       btn.classList.toggle('active', stickyMods[mod]);
-    });
+    }
+    btn.addEventListener('click', handler);
+    btn.addEventListener('touchstart', handler);
   });
 
   // --- Shutdown ---
   var confirmOverlay = document.getElementById('confirm-overlay');
   var shutdownBtn = document.getElementById('shutdown-btn');
 
-  shutdownBtn.addEventListener('click', function(e) {
-    e.preventDefault();
+  function showConfirm(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     confirmOverlay.style.display = 'flex';
-  });
-  // Also handle touch for mobile
-  shutdownBtn.addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    confirmOverlay.style.display = 'flex';
-  });
+  }
+  shutdownBtn.addEventListener('click', showConfirm);
+  shutdownBtn.addEventListener('touchstart', showConfirm);
 
   document.getElementById('confirm-no').addEventListener('click', function() {
     confirmOverlay.style.display = 'none';
@@ -607,7 +631,7 @@
       });
     } catch (e) { /* server is shutting down */ }
     confirmOverlay.style.display = 'none';
-    token = null; // prevent reconnect
+    token = null;
     if (ws) ws.close();
     document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#aaa;font-size:18px;">서버가 종료되었습니다.</div>';
   });
