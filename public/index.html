@@ -92,8 +92,7 @@
 
   <div id="toolbar">
     <button class="tb" id="tb-kb">⌨ 키보드</button>
-    <button class="tb" id="tb-dl">◀</button>
-    <button class="tb" id="tb-dr">▶</button>
+    <span id="space-btns"></span>
     <button class="tb" id="tb-rc">우클릭</button>
     <button class="tb" data-key="Escape">ESC</button>
     <button class="tb tb-sm mod" data-mod="ctrl">Ctrl</button>
@@ -161,7 +160,7 @@
     ws.onmessage=function(ev){
       var m; try{m=JSON.parse(ev.data);}catch(e){return;}
       if(m.type==='auth-fail'){token=null;login.style.display='flex';stream.style.display='none';errEl.textContent='세션 만료';errEl.style.display='block';goBtn.disabled=false;}
-      else if(m.type==='screen-info'){sW=m.width;sH=m.height;cvs.width=m.width;cvs.height=m.height;}
+      else if(m.type==='screen-info'){sW=m.width;sH=m.height;cvs.width=m.width;cvs.height=m.height;if(m.spaces>0)buildSpaceBtns(m.spaces);}
       else if(m.type==='frame'){renderFrame(m.data);}
       else if(m.type==='quality-adjust'){document.getElementById('d-q').textContent=m.quality;}
       else if(m.type==='system-stats'){
@@ -264,9 +263,23 @@
   function tbClick(id,fn){var el=document.getElementById(id);el.onclick=function(e){e.preventDefault();e.stopPropagation();fn();};el.ontouchstart=function(e){e.preventDefault();e.stopPropagation();fn();};}
 
   tbClick('tb-kb',function(){hinput.value='';hinput.focus();});
-  tbClick('tb-dl',function(){si({type:'key-down',key:'ArrowLeft',modifiers:['ctrl']});si({type:'key-up',key:'ArrowLeft'});});
-  tbClick('tb-dr',function(){si({type:'key-down',key:'ArrowRight',modifiers:['ctrl']});si({type:'key-up',key:'ArrowRight'});});
   tbClick('tb-rc',function(){rcMode=!rcMode;document.getElementById('tb-rc').classList.toggle('on',rcMode);});
+
+  // Build desktop/space buttons dynamically
+  function buildSpaceBtns(count){
+    var container=document.getElementById('space-btns');
+    container.innerHTML='';
+    for(var i=1;i<=Math.min(count,9);i++){
+      var b=document.createElement('button');
+      b.className='tb tb-sm';
+      b.textContent=i;
+      b.setAttribute('data-space',i);
+      (function(n){
+        b.onclick=b.ontouchstart=function(e){e.preventDefault();e.stopPropagation();si({type:'switch-space',n:n});};
+      })(i);
+      container.appendChild(b);
+    }
+  }
 
   document.querySelectorAll('.tb[data-key]').forEach(function(b){
     var k=b.getAttribute('data-key');

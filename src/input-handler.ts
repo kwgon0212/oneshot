@@ -40,6 +40,11 @@ const HELPER_SOURCE = `
 #include <stdlib.h>
 #include <string.h>
 
+// Private API for Spaces
+typedef int CGSConnectionID;
+extern CGSConnectionID _CGSDefaultConnection(void);
+extern CFArrayRef CGSCopyManagedDisplaySpaces(CGSConnectionID cid);
+
 int main(int argc, char *argv[]) {
     if (argc < 2) return 1;
 
@@ -49,6 +54,30 @@ int main(int argc, char *argv[]) {
         size_t ph = CGDisplayPixelsHigh(mainDisplay);
         CGRect bounds = CGDisplayBounds(mainDisplay);
         printf("%d %d %d %d\\n", (int)bounds.size.width, (int)bounds.size.height, (int)pw, (int)ph);
+        return 0;
+    }
+
+    if (strcmp(argv[1], "spaces") == 0) {
+        CGSConnectionID cid = _CGSDefaultConnection();
+        CFArrayRef displays = CGSCopyManagedDisplaySpaces(cid);
+        if (!displays) { printf("0\\n"); return 0; }
+        int total = 0;
+        for (CFIndex i = 0; i < CFArrayGetCount(displays); i++) {
+            CFDictionaryRef disp = (CFDictionaryRef)CFArrayGetValueAtIndex(displays, i);
+            CFArrayRef spaces = (CFArrayRef)CFDictionaryGetValue(disp, CFSTR("Spaces"));
+            if (spaces) {
+                for (CFIndex j = 0; j < CFArrayGetCount(spaces); j++) {
+                    CFDictionaryRef space = (CFDictionaryRef)CFArrayGetValueAtIndex(spaces, j);
+                    CFNumberRef typeRef = (CFNumberRef)CFDictionaryGetValue(space, CFSTR("type"));
+                    int type = 0;
+                    if (typeRef) CFNumberGetValue(typeRef, kCFNumberIntType, &type);
+                    // type 0 = normal desktop, type 4 = fullscreen app
+                    if (type == 0) total++;
+                }
+            }
+        }
+        CFRelease(displays);
+        printf("%d\\n", total);
         return 0;
     }
 
@@ -129,6 +158,14 @@ function macHelper(args: string[]): void {
   } catch {
     // best effort
   }
+}
+
+export function getSpaceCount(): number {
+  if (!helperReady) return 0;
+  try {
+    const out = execFileSync(HELPER_PATH, ['spaces'], { encoding: 'utf-8', timeout: 2000 }).trim();
+    return parseInt(out, 10) || 0;
+  } catch { return 0; }
 }
 
 // Returns main display size in POINTS (not pixels) for correct coordinate mapping

@@ -7,7 +7,7 @@ import { verifyPassword, createSessionToken, isValidToken } from './auth';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize,
-  ensureMacHelper, getMainDisplayPoints,
+  ensureMacHelper, getMainDisplayPoints, getSpaceCount,
 } from './input-handler';
 import { startCapture, getScreenSize, CaptureOptions, CaptureSession } from './capture';
 
@@ -106,6 +106,10 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
 
   setScreenSize(displayWidth, displayHeight);
 
+  // Get space/desktop count
+  const spaceCount = process.platform === 'darwin' ? getSpaceCount() : 0;
+  if (spaceCount > 0) console.log(`🖥️  데스크톱: ${spaceCount}개`);
+
   // Adaptive quality state
   let currentQuality = captureOptions.quality;
   let currentScale = captureOptions.scale;
@@ -190,6 +194,7 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
             type: 'screen-info',
             width: screenshotSize.width,
             height: screenshotSize.height,
+            spaces: spaceCount,
           }));
 
           // Start streaming
@@ -233,6 +238,12 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
         case 'set-fps':
           if (msg.fps && captureSession) {
             captureSession.updateFps(msg.fps);
+          }
+          break;
+        case 'switch-space':
+          if (msg.n >= 1 && msg.n <= 9) {
+            // Ctrl+Number to switch desktop (macOS keyboard shortcut)
+            handleKeyDown(String(msg.n), ['ctrl']);
           }
           break;
       }
