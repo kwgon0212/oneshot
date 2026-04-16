@@ -385,11 +385,8 @@
     sendInput({ type: 'mouse-up', x: r.x, y: r.y, button: getButton(e) });
   });
 
-  canvas.addEventListener('click', function(e) {
-    e.preventDefault();
-    var r = getCanvasRatio(e);
-    sendInput({ type: 'mouse-click', x: r.x, y: r.y, button: getButton(e) });
-  });
+  // No separate 'click' handler — mousedown+mouseup already handle it.
+  // mouse-click is only sent from touch taps and toolbar buttons.
 
   canvas.addEventListener('wheel', function(e) {
     e.preventDefault();

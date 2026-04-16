@@ -6,6 +6,7 @@ import { verifyPassword, createSessionToken, isValidToken } from './auth';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize,
+  ensureMacHelper,
 } from './input-handler';
 import { startCapture, getScreenSize, CaptureOptions, CaptureSession } from './capture';
 
@@ -62,6 +63,11 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
       process.exit(0);
     }, 500);
   });
+
+  // Compile macOS mouse helper if needed
+  if (process.platform === 'darwin') {
+    ensureMacHelper();
+  }
 
   // Get screen size for coordinate mapping
   const screenSize = await getScreenSize();

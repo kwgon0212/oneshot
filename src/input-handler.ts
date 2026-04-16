@@ -1,5 +1,7 @@
-import { execSync } from 'child_process';
-import { platform } from 'os';
+import { execSync, execFileSync } from 'child_process';
+import { existsSync, writeFileSync, mkdirSync, chmodSync } from 'fs';
+import { join } from 'path';
+import { homedir, platform } from 'os';
 
 let screenWidth = 1920;
 let screenHeight = 1080;
@@ -27,42 +29,127 @@ export function ratioToAbsolute(
   };
 }
 
+// --- macOS: CGEvent helper binary ---
+
+const HELPER_DIR = join(homedir(), '.remote-desktop-ts');
+const HELPER_PATH = join(HELPER_DIR, 'mouse_helper');
+
+const HELPER_SOURCE = `
+#include <ApplicationServices/ApplicationServices.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) return 1;
+
+    if (strcmp(argv[1], "move") == 0 && argc >= 4) {
+        CGEventRef e = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved,
+            CGPointMake(atof(argv[2]), atof(argv[3])), kCGMouseButtonLeft);
+        CGEventPost(kCGHIDEventTap, e); CFRelease(e);
+    }
+    else if (strcmp(argv[1], "click") == 0 && argc >= 5) {
+        double x = atof(argv[2]), y = atof(argv[3]);
+        int right = atoi(argv[4]);
+        CGEventType down = right ? kCGEventRightMouseDown : kCGEventLeftMouseDown;
+        CGEventType up = right ? kCGEventRightMouseUp : kCGEventLeftMouseUp;
+        CGMouseButton mb = right ? kCGMouseButtonRight : kCGMouseButtonLeft;
+        CGEventRef e = CGEventCreateMouseEvent(NULL, down, CGPointMake(x, y), mb);
+        CGEventPost(kCGHIDEventTap, e); CFRelease(e);
+        usleep(10000);
+        e = CGEventCreateMouseEvent(NULL, up, CGPointMake(x, y), mb);
+        CGEventPost(kCGHIDEventTap, e); CFRelease(e);
+    }
+    else if (strcmp(argv[1], "down") == 0 && argc >= 5) {
+        double x = atof(argv[2]), y = atof(argv[3]);
+        int right = atoi(argv[4]);
+        CGEventType t = right ? kCGEventRightMouseDown : kCGEventLeftMouseDown;
+        CGMouseButton mb = right ? kCGMouseButtonRight : kCGMouseButtonLeft;
+        CGEventRef e = CGEventCreateMouseEvent(NULL, t, CGPointMake(x, y), mb);
+        CGEventPost(kCGHIDEventTap, e); CFRelease(e);
+    }
+    else if (strcmp(argv[1], "up") == 0 && argc >= 5) {
+        double x = atof(argv[2]), y = atof(argv[3]);
+        int right = atoi(argv[4]);
+        CGEventType t = right ? kCGEventRightMouseUp : kCGEventLeftMouseUp;
+        CGMouseButton mb = right ? kCGMouseButtonRight : kCGMouseButtonLeft;
+        CGEventRef e = CGEventCreateMouseEvent(NULL, t, CGPointMake(x, y), mb);
+        CGEventPost(kCGHIDEventTap, e); CFRelease(e);
+    }
+    else if (strcmp(argv[1], "scroll") == 0 && argc >= 3) {
+        CGEventRef e = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 1, atoi(argv[2]));
+        CGEventPost(kCGHIDEventTap, e); CFRelease(e);
+    }
+    return 0;
+}
+`;
+
+let helperReady = false;
+
+export function ensureMacHelper(): void {
+  if (helperReady) return;
+  if (existsSync(HELPER_PATH)) {
+    helperReady = true;
+    return;
+  }
+
+  if (!existsSync(HELPER_DIR)) {
+    mkdirSync(HELPER_DIR, { recursive: true });
+  }
+
+  const srcPath = join(HELPER_DIR, 'mouse_helper.c');
+  writeFileSync(srcPath, HELPER_SOURCE);
+
+  try {
+    execSync(`cc -framework ApplicationServices -o "${HELPER_PATH}" "${srcPath}"`, {
+      stdio: 'ignore',
+      timeout: 30000,
+    });
+    chmodSync(HELPER_PATH, 0o755);
+    helperReady = true;
+    console.log('✅ macOS 마우스 헬퍼 컴파일 완료');
+  } catch {
+    console.error('⚠️  마우스 헬퍼 컴파일 실패 (Xcode CLT 필요: xcode-select --install)');
+  }
+}
+
+function macHelper(args: string[]): void {
+  if (!helperReady) return;
+  try {
+    execFileSync(HELPER_PATH, args, { stdio: 'ignore', timeout: 2000 });
+  } catch {
+    // best effort
+  }
+}
+
 function exec(cmd: string): void {
   try {
     execSync(cmd, { stdio: 'ignore', timeout: 2000 });
   } catch {
-    // Ignore errors — best effort input
+    // best effort
   }
 }
 
 // --- macOS ---
 
 function macMouseMove(x: number, y: number): void {
-  exec(`osascript -e 'tell application "System Events" to do shell script "python3 -c \\"import Quartz; Quartz.CGEventPost(0, Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, (${x}, ${y}), 0))\\""'`);
+  macHelper(['move', String(x), String(y)]);
 }
 
 function macMouseClick(x: number, y: number, button: string): void {
-  if (button === 'right') {
-    exec(`osascript -e 'tell application "System Events" to do shell script "python3 -c \\"import Quartz; e=Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventRightMouseDown, (${x}, ${y}), 1); Quartz.CGEventPost(0, e); e=Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventRightMouseUp, (${x}, ${y}), 1); Quartz.CGEventPost(0, e)\\""'`);
-  } else {
-    exec(`osascript -e 'tell application "System Events" to do shell script "python3 -c \\"import Quartz; e=Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventLeftMouseDown, (${x}, ${y}), 0); Quartz.CGEventPost(0, e); e=Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventLeftMouseUp, (${x}, ${y}), 0); Quartz.CGEventPost(0, e)\\""'`);
-  }
+  macHelper(['click', String(x), String(y), button === 'right' ? '1' : '0']);
 }
 
 function macMouseDown(x: number, y: number, button: string): void {
-  const eventType = button === 'right' ? 'kCGEventRightMouseDown' : 'kCGEventLeftMouseDown';
-  const btn = button === 'right' ? 1 : 0;
-  exec(`osascript -e 'tell application "System Events" to do shell script "python3 -c \\"import Quartz; Quartz.CGEventPost(0, Quartz.CGEventCreateMouseEvent(None, Quartz.${eventType}, (${x}, ${y}), ${btn}))\\""'`);
+  macHelper(['down', String(x), String(y), button === 'right' ? '1' : '0']);
 }
 
 function macMouseUp(x: number, y: number, button: string): void {
-  const eventType = button === 'right' ? 'kCGEventRightMouseUp' : 'kCGEventLeftMouseUp';
-  const btn = button === 'right' ? 1 : 0;
-  exec(`osascript -e 'tell application "System Events" to do shell script "python3 -c \\"import Quartz; Quartz.CGEventPost(0, Quartz.CGEventCreateMouseEvent(None, Quartz.${eventType}, (${x}, ${y}), ${btn}))\\""'`);
+  macHelper(['up', String(x), String(y), button === 'right' ? '1' : '0']);
 }
 
 function macScroll(deltaY: number): void {
-  exec(`osascript -e 'tell application "System Events" to do shell script "python3 -c \\"import Quartz; e=Quartz.CGEventCreateScrollWheelEvent(None, 0, 1, ${Math.round(deltaY)}); Quartz.CGEventPost(0, e)\\""'`);
+  macHelper(['scroll', String(Math.round(deltaY))]);
 }
 
 function macKeyTap(key: string, modifiers: string[]): void {
