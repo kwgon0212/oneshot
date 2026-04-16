@@ -39,7 +39,7 @@ export function ratioToAbsolute(
 // --- macOS: CGEvent helper binary ---
 
 const HELPER_DIR = join(homedir(), '.remote-desktop-ts');
-const HELPER_PATH = join(HELPER_DIR, 'mouse_helper');
+export const HELPER_PATH = join(HELPER_DIR, 'mouse_helper');
 
 const HELPER_SOURCE = `
 #include <ApplicationServices/ApplicationServices.h>
@@ -213,6 +213,59 @@ int main(int argc, char *argv[]) {
             CFRelease(str);
         }
     }
+    else if (strcmp(argv[1], "daemon") == 0) {
+        setbuf(stdout, NULL);
+        char line[256];
+        while (fgets(line, sizeof(line), stdin)) {
+            if (strncmp(line, "cap", 3) == 0) {
+                int di = 0; float q = 75, s = 1.0;
+                sscanf(line, "cap %d %f %f", &di, &q, &s);
+
+                uint32_t dc = 0;
+                CGGetActiveDisplayList(0, NULL, &dc);
+                CGDirectDisplayID *ds = (CGDirectDisplayID *)malloc(dc * sizeof(CGDirectDisplayID));
+                CGGetActiveDisplayList(dc, ds, &dc);
+                CGDirectDisplayID did = ((uint32_t)di < dc) ? ds[di] : ds[0];
+                free(ds);
+
+                CGImageRef img = CGDisplayCreateImage(did);
+                if (!img) { uint32_t z=0; fwrite(&z,4,1,stdout); continue; }
+
+                if (s < 0.99f) {
+                    size_t w = (size_t)(CGImageGetWidth(img) * s);
+                    size_t h = (size_t)(CGImageGetHeight(img) * s);
+                    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+                    CGContextRef c = CGBitmapContextCreate(NULL, w, h, 8, w*4, cs,
+                        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+                    CGContextSetInterpolationQuality(c, kCGInterpolationLow);
+                    CGContextDrawImage(c, CGRectMake(0,0,w,h), img);
+                    CGImageRelease(img);
+                    img = CGBitmapContextCreateImage(c);
+                    CGContextRelease(c);
+                    CGColorSpaceRelease(cs);
+                }
+
+                CFMutableDataRef jd = CFDataCreateMutable(NULL, 0);
+                CGImageDestinationRef dest = CGImageDestinationCreateWithData(jd, CFSTR("public.jpeg"), 1, NULL);
+                float qf = q / 100.0f;
+                CFNumberRef qn = CFNumberCreate(NULL, kCFNumberFloatType, &qf);
+                const void *keys[] = { kCGImageDestinationLossyCompressionQuality };
+                const void *vals[] = { qn };
+                CFDictionaryRef props = CFDictionaryCreate(NULL, keys, vals, 1, NULL, NULL);
+                CGImageDestinationAddImage(dest, img, props);
+                CGImageDestinationFinalize(dest);
+
+                uint32_t len = (uint32_t)CFDataGetLength(jd);
+                uint32_t lenBE = htonl(len);
+                fwrite(&lenBE, 4, 1, stdout);
+                fwrite(CFDataGetBytePtr(jd), 1, len, stdout);
+
+                CFRelease(props); CFRelease(qn); CFRelease(dest);
+                CFRelease(jd); CGImageRelease(img);
+            }
+        }
+        return 0;
+    }
     return 0;
 }
 `;
@@ -234,7 +287,7 @@ export function ensureMacHelper(): void {
   writeFileSync(srcPath, HELPER_SOURCE);
 
   try {
-    execSync(`cc -framework ApplicationServices -o "${HELPER_PATH}" "${srcPath}"`, {
+    execSync(`cc -mmacosx-version-min=14.0 -framework ApplicationServices -framework ImageIO -o "${HELPER_PATH}" "${srcPath}"`, {
       stdio: 'ignore',
       timeout: 30000,
     });
