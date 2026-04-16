@@ -253,13 +253,28 @@
   }
 
   // Input toast
-  var toastTimer, toastBuf='';
-  function showToast(text){
-    toastBuf+=text;
-    inputToast.textContent=toastBuf;
+  var toastTimer, toastBuf='', composingText='';
+  function updateToast(){
+    var display=toastBuf+(composingText?composingText:'');
+    if(!display){inputToast.classList.remove('show');return;}
+    inputToast.textContent=display;
     inputToast.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer=setTimeout(function(){inputToast.classList.remove('show');toastBuf='';},1500);
+    toastTimer=setTimeout(function(){inputToast.classList.remove('show');toastBuf='';composingText='';},1500);
+  }
+  function appendToast(text){toastBuf+=text;updateToast();}
+  function backspaceToast(){if(toastBuf.length>0){toastBuf=toastBuf.slice(0,-1);updateToast();}}
+
+  // Flush composing text immediately
+  function flushInput(){
+    if(hinput.value){
+      si({type:'type-text',text:hinput.value});
+      toastBuf+=hinput.value;
+      hinput.value='';
+      composingText='';
+      composing=false;
+      updateToast();
+    }
   }
 
   // Zoom/pan — canvas always keeps object-fit:contain, only transform changes
@@ -305,6 +320,7 @@
 
   cvs.addEventListener('touchstart',function(e){
     e.preventDefault();
+    flushInput();
     hinput.blur();
     if(e.touches.length===1){
       var t=e.touches[0],p=ratio(t);
@@ -392,7 +408,7 @@
   // --- Toolbar buttons ---
   function tbClick(id,fn){
     var el=document.getElementById(id);
-    function run(e){e.preventDefault();e.stopPropagation();el.classList.add('pressed');setTimeout(function(){el.classList.remove('pressed');},150);fn();}
+    function run(e){e.preventDefault();e.stopPropagation();flushInput();el.classList.add('pressed');setTimeout(function(){el.classList.remove('pressed');},150);fn();}
     el.onclick=run;el.ontouchstart=run;
   }
 
@@ -503,35 +519,35 @@
   // Hidden input
   // Korean composition handling
   var composing=false;
+  hinput.addEventListener('blur',function(){flushInput();});
   hinput.addEventListener('compositionstart',function(){composing=true;});
+  hinput.addEventListener('compositionupdate',function(e){
+    composingText=e.data||'';
+    updateToast();
+  });
   hinput.addEventListener('compositionend',function(e){
     composing=false;
-    var v=e.data||hinput.value;
+    var v=e.data||'';
     if(v.length>0){
       si({type:'type-text',text:v});
-      showToast(v);
+      toastBuf+=v;
+      composingText='';
+      updateToast();
     }
     hinput.value='';
   });
   hinput.addEventListener('input',function(){
-    if(composing){
-      // Show composing text in toast (preview) but don't send yet
-      if(hinput.value) showToast(hinput.value);
-      // Remove last char from buffer since showToast appends — replace instead
-      toastBuf=toastBuf.slice(0,-(hinput.value.length-1)||undefined);
-      inputToast.textContent=toastBuf;
-      return;
-    }
+    if(composing)return; // compositionupdate handles preview
     var v=hinput.value;
     if(v.length>0){
       si({type:'type-text',text:v});
-      showToast(v);
+      appendToast(v);
       hinput.value='';
     }
   });
   hinput.addEventListener('keydown',function(e){
     if(composing)return;
-    if(e.key==='Backspace'){e.preventDefault();sKey('Backspace');if(toastBuf.length>0){toastBuf=toastBuf.slice(0,-1);inputToast.textContent=toastBuf;}clearTimeout(toastTimer);toastTimer=setTimeout(function(){inputToast.classList.remove('show');toastBuf='';},1500);}
+    if(e.key==='Backspace'){e.preventDefault();sKey('Backspace');backspaceToast();}
     else if(e.key==='Enter'){e.preventDefault();sKey('Enter');inputToast.classList.remove('show');toastBuf='';}
     else if(e.key==='Tab'){e.preventDefault();sKey('Tab');}
     else if(e.key==='Escape'){e.preventDefault();sKey('Escape');}
