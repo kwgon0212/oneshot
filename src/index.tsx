@@ -99,12 +99,37 @@ async function startServer(config: Config): Promise<void> {
   });
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  // 헤드리스: 모든 출력 끝난 후 밝기 0
+  // 헤드리스: 유저가 Enter 누르면 밝기 0
   if (isMac && headless && originalBrightness >= 0) {
-    console.log(`💡 3초 후 디스플레이 밝기 → 0%`);
-    await new Promise(r => setTimeout(r, 3000));
+    console.log('');
+    console.log('💡 Enter 를 누르면 디스플레이가 꺼집니다.');
+    console.log('   (아무 키를 누르면 밝기가 복원됩니다)');
+    await new Promise<void>(resolve => {
+      process.stdin.setRawMode?.(false);
+      process.stdin.resume();
+      process.stdin.once('data', () => resolve());
+    });
     setBrightness(0);
-    console.log('🌑 디스플레이 꺼짐');
+    console.log('🌑 디스플레이 꺼짐 (아무 키 → 복원)');
+
+    // 아무 키 누르면 밝기 복원
+    process.stdin.setRawMode?.(true);
+    process.stdin.resume();
+    process.stdin.on('data', (data) => {
+      // Ctrl+C는 shutdown에서 처리
+      if (data[0] === 3) return;
+      if (originalBrightness >= 0) {
+        setBrightness(originalBrightness);
+        console.log(`💡 밝기 복원: ${Math.round(originalBrightness * 100)}%`);
+        console.log('   Enter 를 누르면 다시 꺼집니다.');
+        // 다음 Enter로 다시 끄기
+        process.stdin.once('data', (d) => {
+          if (d[0] === 3) return;
+          setBrightness(0);
+          console.log('🌑 디스플레이 꺼짐');
+        });
+      }
+    });
   }
 
   console.log('⌨️  Ctrl+C 로 종료');
