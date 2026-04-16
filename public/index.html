@@ -2,15 +2,15 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
 <title>Remote Desktop</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #1a1a2e; color: #eee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; height: 100vh; width: 100vw; }
+  body { background: #1a1a2e; color: #eee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; height: 100vh; width: 100vw; touch-action: none; }
 
   /* Login Screen */
   #login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
-  .login-box { background: #16213e; padding: 40px; border-radius: 12px; text-align: center; min-width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .login-box { background: #16213e; padding: 40px; border-radius: 12px; text-align: center; min-width: 320px; max-width: 90vw; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
   .login-box h1 { font-size: 24px; margin-bottom: 8px; }
   .login-box p { color: #888; margin-bottom: 24px; font-size: 14px; }
   .login-box input { width: 100%; padding: 12px 16px; border: 2px solid #333; border-radius: 8px; background: #0f1629; color: #eee; font-size: 16px; outline: none; margin-bottom: 16px; }
@@ -21,17 +21,33 @@
   .login-error { color: #ff6b6b; margin-top: 12px; font-size: 14px; display: none; }
 
   /* Stream Screen */
-  #stream-screen { display: none; width: 100vw; height: 100vh; position: relative; }
-  #canvas { width: 100%; height: 100%; object-fit: contain; cursor: default; display: block; background: #000; }
+  #stream-screen { display: none; width: 100vw; height: 100vh; position: relative; flex-direction: column; }
+  #canvas-wrap { flex: 1; position: relative; overflow: hidden; background: #000; }
+  #canvas { width: 100%; height: 100%; object-fit: contain; cursor: default; display: block; }
 
   /* Status Bar */
   #status-bar { position: fixed; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-family: monospace; z-index: 100; display: none; }
+
+  /* Mobile Toolbar */
+  #mobile-toolbar { display: none; background: #16213e; border-top: 1px solid #333; padding: 6px 8px; z-index: 50; }
+  #mobile-toolbar .toolbar-row { display: flex; gap: 6px; align-items: center; }
+  #mobile-toolbar .toolbar-row + .toolbar-row { margin-top: 6px; }
+  .tb-btn { background: #2a2a4a; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; font-size: 13px; font-family: monospace; cursor: pointer; white-space: nowrap; flex-shrink: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
+  .tb-btn:active { background: #4a9eff; color: #fff; }
+  .tb-btn.active { background: #4a9eff; color: #fff; border-color: #4a9eff; }
+  .tb-btn.wide { flex: 1; text-align: center; }
+  .tb-sep { width: 1px; height: 28px; background: #444; flex-shrink: 0; }
+  #hidden-input { position: fixed; left: -9999px; top: -9999px; opacity: 0; width: 1px; height: 1px; }
 
   /* Reconnect Overlay */
   #reconnect-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; flex-direction: column; }
   .spinner { width: 40px; height: 40px; border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   #reconnect-msg { font-size: 16px; color: #ccc; }
+
+  @media (pointer: coarse) {
+    #mobile-toolbar { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -49,12 +65,41 @@
 
 <!-- Stream -->
 <div id="stream-screen">
-  <canvas id="canvas"></canvas>
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+  </div>
   <div id="status-bar">
     <span id="fps-display">0 FPS</span> |
     <span id="quality-display">Q:75</span>
   </div>
+
+  <!-- Mobile Toolbar -->
+  <div id="mobile-toolbar">
+    <div class="toolbar-row">
+      <button class="tb-btn" id="tb-keyboard">⌨️ 키보드</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" id="tb-desk-left">◀ 데스크톱</button>
+      <button class="tb-btn" id="tb-desk-right">데스크톱 ▶</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" id="tb-right-click">우클릭</button>
+    </div>
+    <div class="toolbar-row">
+      <button class="tb-btn" data-key="Escape">ESC</button>
+      <button class="tb-btn" data-key="Tab">Tab</button>
+      <button class="tb-btn" data-key="Enter">Enter</button>
+      <button class="tb-btn" data-key="Backspace">⌫</button>
+      <button class="tb-btn" data-key="Space">Space</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn tb-mod" data-mod="ctrl">Ctrl</button>
+      <button class="tb-btn tb-mod" data-mod="alt">Alt</button>
+      <button class="tb-btn tb-mod" data-mod="meta">⌘</button>
+      <button class="tb-btn tb-mod" data-mod="shift">⇧</button>
+    </div>
+  </div>
 </div>
+
+<!-- Hidden input for mobile keyboard -->
+<input type="text" id="hidden-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
 <!-- Reconnect Overlay -->
 <div id="reconnect-overlay">
@@ -67,48 +112,52 @@
   'use strict';
 
   // --- State ---
-  let ws = null;
-  let token = null;
-  let screenWidth = 1920;
-  let screenHeight = 1080;
-  let reconnectAttempts = 0;
-  const MAX_RECONNECT = 10;
-  let frameCount = 0;
-  let lastFpsTime = Date.now();
-  let showStatus = false;
+  var ws = null;
+  var token = null;
+  var screenWidth = 1920;
+  var screenHeight = 1080;
+  var reconnectAttempts = 0;
+  var MAX_RECONNECT = 10;
+  var frameCount = 0;
+  var lastFpsTime = Date.now();
+  var showStatus = false;
+  var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  var rightClickMode = false;
+  var stickyMods = { ctrl: false, alt: false, meta: false, shift: false };
 
   // --- Elements ---
-  const loginScreen = document.getElementById('login-screen');
-  const streamScreen = document.getElementById('stream-screen');
-  const passwordInput = document.getElementById('password-input');
-  const connectBtn = document.getElementById('connect-btn');
-  const loginError = document.getElementById('login-error');
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  const statusBar = document.getElementById('status-bar');
-  const fpsDisplay = document.getElementById('fps-display');
-  const qualityDisplay = document.getElementById('quality-display');
-  const reconnectOverlay = document.getElementById('reconnect-overlay');
-  const reconnectMsg = document.getElementById('reconnect-msg');
+  var loginScreen = document.getElementById('login-screen');
+  var streamScreen = document.getElementById('stream-screen');
+  var passwordInput = document.getElementById('password-input');
+  var connectBtn = document.getElementById('connect-btn');
+  var loginError = document.getElementById('login-error');
+  var canvas = document.getElementById('canvas');
+  var ctx = canvas.getContext('2d');
+  var statusBar = document.getElementById('status-bar');
+  var fpsDisplay = document.getElementById('fps-display');
+  var qualityDisplay = document.getElementById('quality-display');
+  var reconnectOverlay = document.getElementById('reconnect-overlay');
+  var reconnectMsg = document.getElementById('reconnect-msg');
+  var hiddenInput = document.getElementById('hidden-input');
 
   // --- Auth ---
   async function authenticate() {
-    const pw = passwordInput.value;
+    var pw = passwordInput.value;
     if (!pw) return;
     connectBtn.disabled = true;
     loginError.style.display = 'none';
 
     try {
-      const res = await fetch('/auth', {
+      var res = await fetch('/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: pw }),
       });
-      const data = await res.json();
+      var data = await res.json();
       if (data.type === 'auth-ok') {
         token = data.token;
         loginScreen.style.display = 'none';
-        streamScreen.style.display = 'block';
+        streamScreen.style.display = 'flex';
         connectWebSocket();
       } else {
         loginError.style.display = 'block';
@@ -128,7 +177,7 @@
 
   // --- WebSocket ---
   function getWsUrl() {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     return proto + '//' + location.host;
   }
 
@@ -209,7 +258,7 @@
     img.src = 'data:image/jpeg;base64,' + base64Data;
   }
 
-  // --- Input: Mouse ---
+  // --- Input Helpers ---
   function getCanvasRatio(e) {
     var rect = canvas.getBoundingClientRect();
     return {
@@ -230,6 +279,32 @@
     }
   }
 
+  function getStickyMods() {
+    var mods = [];
+    if (stickyMods.ctrl) mods.push('ctrl');
+    if (stickyMods.alt) mods.push('alt');
+    if (stickyMods.meta) mods.push('meta');
+    if (stickyMods.shift) mods.push('shift');
+    return mods;
+  }
+
+  function clearStickyMods() {
+    stickyMods.ctrl = false;
+    stickyMods.alt = false;
+    stickyMods.meta = false;
+    stickyMods.shift = false;
+    document.querySelectorAll('.tb-mod').forEach(function(b) { b.classList.remove('active'); });
+  }
+
+  function sendKey(key, extraMods) {
+    var mods = getStickyMods();
+    if (extraMods) mods = mods.concat(extraMods);
+    sendInput({ type: 'key-down', key: key, modifiers: mods });
+    sendInput({ type: 'key-up', key: key });
+    clearStickyMods();
+  }
+
+  // --- Input: Mouse (Desktop) ---
   var lastMoveTime = 0;
   canvas.addEventListener('mousemove', function(e) {
     var now = Date.now();
@@ -266,7 +341,7 @@
 
   canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
 
-  // --- Input: Keyboard ---
+  // --- Input: Keyboard (Desktop) ---
   function getModifiers(e) {
     var mods = [];
     if (e.ctrlKey) mods.push('ctrl');
@@ -278,29 +353,44 @@
 
   document.addEventListener('keydown', function(e) {
     if (streamScreen.style.display === 'none') return;
+    // Status toggle
+    if (e.key === 'i' && !e.ctrlKey && !e.altKey && !e.metaKey && e.target === document.body) {
+      showStatus = !showStatus;
+      statusBar.style.display = showStatus ? 'block' : 'none';
+      return;
+    }
+    // Prevent browser shortcuts
     if (['F5', 'F11', 'F12'].includes(e.key) || (e.ctrlKey && ['r', 'w', 't', 'n', 'l'].includes(e.key.toLowerCase()))) {
       e.preventDefault();
     }
+    // Don't send if typing in hidden input on mobile (handled separately)
+    if (e.target === hiddenInput) return;
     sendInput({ type: 'key-down', key: e.key, modifiers: getModifiers(e) });
   });
 
   document.addEventListener('keyup', function(e) {
     if (streamScreen.style.display === 'none') return;
+    if (e.target === hiddenInput) return;
     sendInput({ type: 'key-up', key: e.key });
   });
 
   // --- Input: Touch (Mobile) ---
   var touchStartPos = null;
+  var touchStartTime = 0;
+  var touchMoved = false;
   var lastTouchMoveTime = 0;
+  var TOUCH_TAP_THRESHOLD = 10; // pixels
 
   canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
     if (e.touches.length === 1) {
       var touch = e.touches[0];
       var r = getCanvasRatio(touch);
-      touchStartPos = r;
+      touchStartPos = { x: r.x, y: r.y, px: touch.clientX, py: touch.clientY };
+      touchStartTime = Date.now();
+      touchMoved = false;
+      // Move cursor to position
       sendInput({ type: 'mouse-move', x: r.x, y: r.y });
-      sendInput({ type: 'mouse-down', x: r.x, y: r.y, button: 'left' });
     }
   }, { passive: false });
 
@@ -310,11 +400,21 @@
     if (now - lastTouchMoveTime < 30) return;
     lastTouchMoveTime = now;
 
-    if (e.touches.length === 1) {
+    if (e.touches.length === 1 && touchStartPos) {
       var touch = e.touches[0];
-      var r = getCanvasRatio(touch);
-      sendInput({ type: 'mouse-move', x: r.x, y: r.y });
+      var dx = Math.abs(touch.clientX - touchStartPos.px);
+      var dy = Math.abs(touch.clientY - touchStartPos.py);
+      if (dx > TOUCH_TAP_THRESHOLD || dy > TOUCH_TAP_THRESHOLD) {
+        if (!touchMoved) {
+          // Drag started
+          touchMoved = true;
+          sendInput({ type: 'mouse-down', x: touchStartPos.x, y: touchStartPos.y, button: 'left' });
+        }
+        var r = getCanvasRatio(touch);
+        sendInput({ type: 'mouse-move', x: r.x, y: r.y });
+      }
     } else if (e.touches.length === 2) {
+      // Pinch → scroll
       var t1 = e.touches[0];
       var t2 = e.touches[1];
       var dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
@@ -337,19 +437,122 @@
   canvas.addEventListener('touchend', function(e) {
     e.preventDefault();
     canvas._lastPinchDist = null;
+
     if (touchStartPos) {
-      sendInput({ type: 'mouse-up', x: touchStartPos.x, y: touchStartPos.y, button: 'left' });
+      if (touchMoved) {
+        // End drag
+        var r = touchStartPos;
+        if (e.changedTouches.length > 0) {
+          r = getCanvasRatio(e.changedTouches[0]);
+        }
+        sendInput({ type: 'mouse-up', x: r.x, y: r.y, button: 'left' });
+      } else {
+        // Tap — send click
+        var btn = rightClickMode ? 'right' : 'left';
+        sendInput({ type: 'mouse-click', x: touchStartPos.x, y: touchStartPos.y, button: btn });
+        if (rightClickMode) {
+          rightClickMode = false;
+          document.getElementById('tb-right-click').classList.remove('active');
+        }
+      }
       touchStartPos = null;
+      touchMoved = false;
     }
   }, { passive: false });
 
-  // --- Status Toggle (press 'i' to toggle) ---
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'i' && !e.ctrlKey && !e.altKey && !e.metaKey && streamScreen.style.display !== 'none') {
-      showStatus = !showStatus;
-      statusBar.style.display = showStatus ? 'block' : 'none';
+  // Long press = right click
+  var longPressTimer = null;
+  canvas.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 1) {
+      longPressTimer = setTimeout(function() {
+        if (touchStartPos && !touchMoved) {
+          sendInput({ type: 'mouse-click', x: touchStartPos.x, y: touchStartPos.y, button: 'right' });
+          touchStartPos = null; // Prevent tap on touchend
+        }
+      }, 600);
+    }
+  }, { passive: true });
+
+  canvas.addEventListener('touchmove', function() {
+    clearTimeout(longPressTimer);
+  }, { passive: true });
+
+  canvas.addEventListener('touchend', function() {
+    clearTimeout(longPressTimer);
+  }, { passive: true });
+
+  // --- Mobile Toolbar ---
+
+  // Keyboard button
+  document.getElementById('tb-keyboard').addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    hiddenInput.focus();
+  });
+
+  // Hidden input captures mobile keyboard input
+  hiddenInput.addEventListener('input', function(e) {
+    var val = hiddenInput.value;
+    if (val.length > 0) {
+      // Send each character
+      for (var i = 0; i < val.length; i++) {
+        sendKey(val[i]);
+      }
+      hiddenInput.value = '';
     }
   });
+
+  hiddenInput.addEventListener('keydown', function(e) {
+    // Handle special keys from mobile keyboard
+    if (['Backspace', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+      e.preventDefault();
+      sendKey(e.key);
+    }
+  });
+
+  // Desktop switch buttons (Ctrl+Left / Ctrl+Right on macOS)
+  document.getElementById('tb-desk-left').addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    sendInput({ type: 'key-down', key: 'ArrowLeft', modifiers: ['ctrl'] });
+    sendInput({ type: 'key-up', key: 'ArrowLeft' });
+  });
+
+  document.getElementById('tb-desk-right').addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    sendInput({ type: 'key-down', key: 'ArrowRight', modifiers: ['ctrl'] });
+    sendInput({ type: 'key-up', key: 'ArrowRight' });
+  });
+
+  // Right-click toggle
+  document.getElementById('tb-right-click').addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    rightClickMode = !rightClickMode;
+    this.classList.toggle('active', rightClickMode);
+  });
+
+  // Special key buttons
+  document.querySelectorAll('.tb-btn[data-key]').forEach(function(btn) {
+    btn.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      sendKey(btn.getAttribute('data-key'));
+    });
+  });
+
+  // Sticky modifier buttons
+  document.querySelectorAll('.tb-mod').forEach(function(btn) {
+    btn.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var mod = btn.getAttribute('data-mod');
+      stickyMods[mod] = !stickyMods[mod];
+      btn.classList.toggle('active', stickyMods[mod]);
+    });
+  });
+
 })();
 </script>
 </body>
