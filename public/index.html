@@ -504,8 +504,8 @@
     }
   });
   hinput.addEventListener('keydown',function(e){
-    if(e.key==='Backspace'){e.preventDefault();sKey('Backspace');showToast('[BS]');}
-    else if(e.key==='Enter'){e.preventDefault();sKey('Enter');showToast('[Enter]');}
+    if(e.key==='Backspace'){e.preventDefault();sKey('Backspace');if(toastBuf.length>0){toastBuf=toastBuf.slice(0,-1);inputToast.textContent=toastBuf;}clearTimeout(toastTimer);toastTimer=setTimeout(function(){inputToast.classList.remove('show');toastBuf='';},1500);}
+    else if(e.key==='Enter'){e.preventDefault();sKey('Enter');inputToast.classList.remove('show');toastBuf='';}
     else if(e.key==='Tab'){e.preventDefault();sKey('Tab');}
     else if(e.key==='Escape'){e.preventDefault();sKey('Escape');}
   });
