@@ -4,145 +4,212 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
 <title>Remote Desktop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
-  body { background: #111; color: #eee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; }
+:root {
+  --bg: #0a0a0f;
+  --surface: rgba(255,255,255,0.06);
+  --surface-hover: rgba(255,255,255,0.1);
+  --glass: rgba(10,10,15,0.75);
+  --glass-border: rgba(255,255,255,0.08);
+  --accent: #3b8bff;
+  --accent-glow: rgba(59,139,255,0.3);
+  --danger: #e63946;
+  --text: #e8e8ed;
+  --text-dim: rgba(255,255,255,0.45);
+  --text-mid: rgba(255,255,255,0.7);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --font: 'Noto Sans KR', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;touch-action:none;background:var(--bg);color:var(--text);font-family:var(--font);}
 
-  /* Login */
-  #login { display: flex; align-items: center; justify-content: center; height: 100dvh; height: 100vh; background: #1a1a2e; }
-  @supports (height: 100dvh) { #login { height: 100dvh; } }
-  .login-box { background: #16213e; padding: 36px; border-radius: 12px; text-align: center; width: 320px; max-width: 90vw; }
-  .login-box h1 { font-size: 22px; margin-bottom: 6px; }
-  .login-box p { color: #888; margin-bottom: 20px; font-size: 13px; }
-  .login-box input { width: 100%; padding: 11px 14px; border: 2px solid #333; border-radius: 8px; background: #0f1629; color: #eee; font-size: 16px; outline: none; margin-bottom: 14px; }
-  .login-box input:focus { border-color: #4a9eff; }
-  .login-box button { width: 100%; padding: 11px; border: none; border-radius: 8px; background: #4a9eff; color: #fff; font-size: 15px; cursor: pointer; font-weight: 600; }
-  .login-box button:disabled { background: #555; }
-  .login-err { color: #ff6b6b; margin-top: 10px; font-size: 13px; display: none; }
+/* ── Login ── */
+#login{display:flex;align-items:center;justify-content:center;height:100dvh;height:100vh;background:var(--bg);position:relative;}
+@supports(height:100dvh){#login{height:100dvh;}}
+#login::before{content:'';position:absolute;top:-30%;left:-20%;width:140%;height:160%;background:radial-gradient(ellipse at 30% 50%,rgba(59,139,255,0.08) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(120,80,255,0.06) 0%,transparent 50%);pointer-events:none;}
+.login-card{position:relative;background:var(--surface);border:1px solid var(--glass-border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:40px 36px;border-radius:20px;width:340px;max-width:88vw;text-align:center;}
+.login-card h1{font-size:20px;font-weight:700;letter-spacing:-0.5px;margin-bottom:4px;}
+.login-card .sub{color:var(--text-dim);font-size:13px;margin-bottom:28px;}
+.login-card input{width:100%;padding:12px 16px;border:1.5px solid rgba(255,255,255,0.1);border-radius:var(--radius-sm);background:rgba(255,255,255,0.04);color:var(--text);font-size:16px;font-family:var(--font);outline:none;transition:border-color .2s;}
+.login-card input:focus{border-color:var(--accent);}
+.login-card .btn{width:100%;padding:12px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:15px;font-weight:600;font-family:var(--font);cursor:pointer;margin-top:14px;transition:opacity .15s;}
+.login-card .btn:active{opacity:.8;}
+.login-card .btn:disabled{background:rgba(255,255,255,0.1);color:var(--text-dim);}
+.login-err{color:var(--danger);font-size:13px;margin-top:12px;display:none;}
 
-  /* Stream */
-  #stream { display: none; flex-direction: column; height: 100dvh; height: 100vh; }
-  @supports (height: 100dvh) { #stream { height: 100dvh; } }
-  #cvs-wrap { flex: 1; min-height: 0; background: #000; position: relative; overflow: hidden; }
-  #cvs { width: 100%; height: 100%; object-fit: contain; display: block; transform-origin: 0 0; }
+/* ── Stream ── */
+#stream{display:none;flex-direction:column;height:100dvh;height:100vh;}
+@supports(height:100dvh){#stream{height:100dvh;}}
+#cvs-wrap{flex:1;min-height:0;background:#000;position:relative;overflow:hidden;}
+#cvs{width:100%;height:100%;object-fit:contain;display:block;transform-origin:0 0;}
 
-  /* Touch indicator */
-  #touch-dot { display: none; position: fixed; width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(74,158,255,0.8); background: rgba(74,158,255,0.25); transform: translate(-50%,-50%); pointer-events: none; z-index: 90; transition: opacity 0.3s; }
-  #touch-dot.show { display: block; }
-  #touch-dot.fade { opacity: 0; }
+/* ── Touch dot ── */
+#touch-dot{display:none;position:fixed;width:22px;height:22px;border-radius:50%;border:2px solid var(--accent);background:var(--accent-glow);transform:translate(-50%,-50%);pointer-events:none;z-index:90;transition:opacity .25s;}
+#touch-dot.show{display:block;}#touch-dot.fade{opacity:0;}
 
-  /* Zoom indicator */
-  #zoom-badge { display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.75); color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 12px; z-index: 90; pointer-events: none; }
-  #zoom-badge.show { display: block; }
+/* ── Badges (zoom, input) ── */
+.badge{position:fixed;left:50%;transform:translateX(-50%);background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:var(--text);padding:5px 14px;border-radius:20px;font-size:13px;font-family:var(--mono);z-index:300;pointer-events:none;opacity:0;transition:opacity .25s;}
+.badge.show{opacity:1;}
+#zoom-badge{bottom:70px;}
+#input-toast{top:48px;font-family:var(--font);font-size:15px;max-width:80vw;word-break:break-all;}
 
-  /* Input preview toast */
-  #input-toast { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #fff; padding: 6px 16px; border-radius: 8px; font-size: 15px; z-index: 300; pointer-events: none; opacity: 0; transition: opacity 0.3s; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); max-width: 80vw; text-align: center; word-break: break-all; }
-  #input-toast.show { opacity: 1; }
+/* ── Top controls ── */
+#top-ctrl{position:fixed;top:8px;left:8px;right:8px;z-index:100;display:flex;gap:6px;pointer-events:none;}
+#top-ctrl>*{pointer-events:auto;}
+.chip{background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:var(--text-mid);border-radius:20px;padding:7px 14px;font-size:13px;font-family:var(--font);font-weight:500;cursor:pointer;transition:background .15s,color .15s,transform .1s;white-space:nowrap;-webkit-tap-highlight-color:transparent;user-select:none;}
+.chip:active{transform:scale(.95);}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.chip-danger{background:rgba(230,57,70,0.15);border-color:rgba(230,57,70,0.2);color:var(--danger);}
+.chip-danger:active{background:rgba(230,57,70,0.3);}
+.spacer{flex:1;}
 
-  /* Floating controls - top left */
-  #ctrl-tl { position: fixed; top: 6px; left: 6px; z-index: 100; display: flex; gap: 6px; }
-  .pill { background: rgba(0,0,0,0.75); color: #ccc; border: none; border-radius: 20px; padding: 5px 12px; font-size: 12px; font-family: monospace; cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); white-space: nowrap; }
-  .pill:active, .pill.on { background: #4a9eff; color: #fff; }
-  .pill-red { background: rgba(180,40,40,0.8); color: #fff; }
+/* ── Info panel ── */
+#info-panel{display:none;position:fixed;top:46px;left:8px;background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);padding:14px 18px;border-radius:var(--radius);font-family:var(--mono);font-size:12px;line-height:2;color:var(--text-mid);z-index:100;min-width:220px;}
+#info-panel.show{display:block;}
+#info-panel input[type=range]{width:80px;vertical-align:middle;accent-color:var(--accent);}
+#info-panel .label{color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:0.5px;}
+#info-panel .val{color:var(--text);font-weight:600;}
 
-  /* Info panel - shown on tap */
-  #info { display: none; position: fixed; top: 38px; left: 6px; background: rgba(0,0,0,0.85); color: #ccc; padding: 10px 14px; border-radius: 10px; font-size: 12px; font-family: monospace; line-height: 1.8; z-index: 100; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-  #info.show { display: block; }
-  #info input[type=range] { width: 90px; vertical-align: middle; }
+/* ── Bottom toolbar ── */
+#toolbar{display:none;background:rgba(15,15,20,0.95);border-top:1px solid var(--glass-border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:50;flex-shrink:0;padding:8px;padding-bottom:max(8px,env(safe-area-inset-bottom));}
+#toolbar.show{display:block;}
+.tb-row{display:flex;gap:6px;flex-wrap:wrap;}
+.tb-row+.tb-row{margin-top:6px;}
+.tbtn{background:var(--surface);color:var(--text);border:1px solid var(--glass-border);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;font-family:var(--font);font-weight:500;cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent;user-select:none;transition:background .12s,transform .1s,border-color .12s;}
+.tbtn:active,.tbtn.pressed{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(.95);}
+.tbtn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.tbtn-sm{padding:10px 11px;font-size:12px;font-family:var(--mono);font-weight:600;min-width:40px;text-align:center;}
+.tbtn-icon{font-size:16px;padding:10px 12px;}
+.tb-sep{width:1px;background:var(--glass-border);align-self:stretch;margin:0 2px;flex-shrink:0;}
 
-  /* Toolbar */
-  #toolbar { display: none; background: #1a1a1a; border-top: 2px solid #4a9eff; z-index: 50; flex-shrink: 0; }
-  #toolbar.show { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; align-items: center; }
-  .tb { background: #333; color: #fff; border: 1px solid #555; border-radius: 6px; padding: 9px 13px; font-size: 13px; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; user-select: none; }
-  .tb:active, .tb.pressed { background: #4a9eff; transform: scale(0.95); }
-  .tb.on { background: #4a9eff; border-color: #4a9eff; }
-  .tb { transition: transform 0.1s, background 0.1s; }
-  .tb-sm { padding: 9px 10px; font-size: 12px; }
+/* ── Panels (apps, monitors) ── */
+#panel{display:none;position:fixed;bottom:0;left:0;right:0;max-height:55vh;background:rgba(15,15,20,0.97);border-top:1px solid var(--glass-border);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:150;overflow-y:auto;-webkit-overflow-scrolling:touch;border-radius:20px 20px 0 0;}
+#panel.show{display:block;animation:slideUp .25s ease-out;}
+@keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+.panel-head{padding:16px 20px 12px;font-size:15px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:rgba(15,15,20,0.97);z-index:1;}
+.panel-head button{background:none;border:none;color:var(--accent);font-size:14px;font-family:var(--font);cursor:pointer;padding:4px 8px;}
+.p-item{padding:14px 20px;border-top:1px solid rgba(255,255,255,0.04);font-size:14px;color:var(--text);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .12s;}
+.p-item:active{background:var(--surface-hover);}
+.p-item .p-sub{font-size:12px;color:var(--text-dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.p-item .p-count{color:var(--text-dim);font-size:12px;margin-left:6px;}
+.p-win{padding:12px 20px 12px 36px;border-top:1px solid rgba(255,255,255,0.03);font-size:13px;color:var(--text-mid);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.p-win:active{background:var(--accent);color:#fff;border-radius:6px;}
+.win-list{display:none;}.win-list.show{display:block;}
 
-  /* Hidden input */
-  #hinput { position: fixed; left: -9999px; top: -9999px; opacity: 0; }
+/* ── Onboarding ── */
+#onboard{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:400;align-items:center;justify-content:center;padding:20px;}
+#onboard.show{display:flex;}
+.onboard-card{background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px;padding:32px 28px;max-width:340px;width:100%;text-align:center;}
+.onboard-card h2{font-size:18px;font-weight:700;margin-bottom:20px;}
+.gesture-list{text-align:left;margin-bottom:24px;}
+.gesture{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+.gesture:last-child{border:none;}
+.gesture .g-icon{width:36px;height:36px;border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.gesture .g-text{font-size:13px;color:var(--text-mid);line-height:1.5;}
+.gesture .g-text strong{color:var(--text);font-weight:600;}
+.onboard-card .btn{width:100%;padding:12px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:15px;font-weight:600;font-family:var(--font);cursor:pointer;}
 
-  /* Overlays */
-  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; flex-direction: column; }
-  .overlay.show { display: flex; }
-  .spin { width: 36px; height: 36px; border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%; animation: sp .8s linear infinite; margin-bottom: 14px; }
-  @keyframes sp { to { transform: rotate(360deg); } }
-  .dialog { background: #16213e; padding: 28px; border-radius: 12px; text-align: center; min-width: 260px; }
-  .dialog p { margin-bottom: 16px; font-size: 15px; }
-  .dialog .sub { font-size: 12px; color: #888; margin-top: -10px; }
-  .dialog .btns { display: flex; gap: 10px; }
-  .dialog .btns button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  .btn-cancel { background: #444; color: #ddd; }
-  .btn-danger { background: #c0392b; color: #fff; }
+/* ── Overlays ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;flex-direction:column;}
+.overlay.show{display:flex;}
+.spin{width:32px;height:32px;border:2.5px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;margin-bottom:14px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.dialog{background:rgba(20,20,30,0.95);border:1px solid var(--glass-border);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);padding:28px;border-radius:var(--radius);text-align:center;min-width:260px;}
+.dialog p{margin-bottom:16px;font-size:15px;font-weight:500;}
+.dialog .sub{font-size:12px;color:var(--text-dim);margin-top:-10px;}
+.dialog .btns{display:flex;gap:10px;}
+.dialog .btns button{flex:1;padding:11px;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;transition:opacity .15s;}
+.dialog .btns button:active{opacity:.8;}
+.btn-cancel{background:var(--surface);color:var(--text);}
+.btn-danger{background:var(--danger);color:#fff;}
 
-  /* App Switcher */
-  #app-list { display: none; position: fixed; bottom: 0; left: 0; right: 0; max-height: 60vh; background: #1a1a1a; border-top: 2px solid #4a9eff; z-index: 150; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  #app-list.show { display: block; }
-  #app-list .app-header { padding: 12px 16px; font-size: 14px; color: #888; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: #1a1a1a; }
-  #app-list .app-header button { background: none; border: none; color: #4a9eff; font-size: 14px; cursor: pointer; padding: 4px 8px; }
-  .app-item { padding: 14px 16px; border-bottom: 1px solid #222; font-size: 15px; color: #eee; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  .app-item:active { background: #333; }
-  .app-name { font-weight: 500; }
-  .app-win-count { color: #888; font-size: 12px; margin-left: 6px; }
-  .win-list { display: none; background: #111; }
-  .win-list.show { display: block; }
-  .win-item { padding: 12px 16px 12px 32px; border-bottom: 1px solid #1a1a1a; font-size: 13px; color: #bbb; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .win-item:active { background: #4a9eff; color: #fff; }
+#hinput{position:fixed;left:-9999px;top:-9999px;opacity:0;}
 </style>
 </head>
 <body>
 
+<!-- Login -->
 <div id="login">
-  <div class="login-box">
+  <div class="login-card">
     <h1>Remote Desktop</h1>
-    <p>비밀번호를 입력하세요</p>
+    <p class="sub">비밀번호를 입력하고 연결하세요</p>
     <input type="password" id="pw" placeholder="비밀번호" autofocus>
-    <button id="go">연결</button>
+    <button class="btn" id="go">연결</button>
     <div class="login-err" id="err">비밀번호가 틀렸습니다</div>
   </div>
 </div>
 
+<!-- Stream -->
 <div id="stream">
   <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
   <div id="touch-dot"></div>
-  <div id="zoom-badge"></div>
-  <div id="input-toast"></div>
+  <div class="badge" id="zoom-badge"></div>
+  <div class="badge" id="input-toast"></div>
 
-  <div id="ctrl-tl">
-    <button class="pill pill-red" id="btn-off">종료</button>
-    <button class="pill" id="btn-info">ℹ</button>
-    <button class="pill" id="btn-tb" style="display:none;">⌨</button>
+  <!-- Top controls -->
+  <div id="top-ctrl">
+    <button class="chip chip-danger" id="btn-off">종료</button>
+    <button class="chip" id="btn-info">상태</button>
+    <div class="spacer"></div>
+    <button class="chip" id="btn-tb" style="display:none;">도구</button>
   </div>
 
-  <div id="info">
-    <div><span id="d-fps">0</span> FPS | Q:<span id="d-q">75</span></div>
-    <div>CPU <span id="d-cpu">-</span>% | MEM <span id="d-mem">-</span>% <span id="d-memg"></span></div>
-    <div>FPS <input type="range" id="fps-sl" min="1" max="30" value="15"> <span id="fps-v">15</span></div>
+  <!-- Info panel -->
+  <div id="info-panel">
+    <div><span class="label">FPS </span><span class="val" id="d-fps">0</span> <span class="label" style="margin-left:12px;">품질 </span><span class="val" id="d-q">75</span></div>
+    <div><span class="label">CPU </span><span class="val" id="d-cpu">-</span>% <span class="label" style="margin-left:12px;">MEM </span><span class="val" id="d-mem">-</span>% <span style="color:var(--text-dim);" id="d-memg"></span></div>
+    <div><span class="label">FPS 조절 </span><input type="range" id="fps-sl" min="1" max="30" value="15"> <span class="val" id="fps-v">15</span></div>
   </div>
 
+  <!-- Bottom toolbar -->
   <div id="toolbar">
-    <button class="tb" id="tb-kb">⌨ 키보드</button>
-    <button class="tb" id="tb-apps">앱 전환</button>
-    <button class="tb" id="tb-disp">모니터</button>
-    <button class="tb" id="tb-rc">우클릭</button>
-    <button class="tb" id="tb-mc">Mission Control</button>
-    <button class="tb" id="tb-zreset">줌 리셋</button>
-    <button class="tb" data-key="Escape">ESC</button>
-    <button class="tb tb-sm mod" data-mod="ctrl">Ctrl</button>
-    <button class="tb tb-sm mod" data-mod="alt">Alt</button>
-    <button class="tb tb-sm mod" data-mod="meta">⌘</button>
-    <button class="tb tb-sm mod" data-mod="shift">⇧</button>
+    <div class="tb-row">
+      <button class="tbtn" id="tb-kb">키보드</button>
+      <button class="tbtn" id="tb-apps">앱 전환</button>
+      <button class="tbtn" id="tb-disp">모니터</button>
+      <button class="tbtn" id="tb-rc">우클릭</button>
+      <button class="tbtn" id="tb-mc">앱 보기</button>
+      <button class="tbtn" id="tb-zreset" style="display:none;">줌 리셋</button>
+    </div>
+    <div class="tb-row">
+      <button class="tbtn tbtn-sm" data-key="Escape">ESC</button>
+      <div class="tb-sep"></div>
+      <button class="tbtn tbtn-sm mod" data-mod="ctrl">Ctrl</button>
+      <button class="tbtn tbtn-sm mod" data-mod="alt">Alt</button>
+      <button class="tbtn tbtn-sm mod" data-mod="meta">Cmd</button>
+      <button class="tbtn tbtn-sm mod" data-mod="shift">Shift</button>
+    </div>
   </div>
 </div>
 
-<div id="app-list">
-  <div class="app-header"><span>실행 중인 앱</span><button id="app-close">닫기</button></div>
-  <div id="app-items"></div>
+<!-- Shared panel for apps/monitors -->
+<div id="panel">
+  <div class="panel-head"><span id="panel-title">실행 중인 앱</span><button id="panel-close">닫기</button></div>
+  <div id="panel-items"></div>
 </div>
 
 <input type="text" id="hinput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
+<!-- Onboarding -->
+<div id="onboard">
+  <div class="onboard-card">
+    <h2>조작 방법</h2>
+    <div class="gesture-list">
+      <div class="gesture"><div class="g-icon">👆</div><div class="g-text"><strong>탭</strong> — 클릭</div></div>
+      <div class="gesture"><div class="g-icon">👆💨</div><div class="g-text"><strong>길게 누르기</strong> — 우클릭</div></div>
+      <div class="gesture"><div class="g-icon">👆↕</div><div class="g-text"><strong>터치 후 드래그</strong> — 끌기</div></div>
+      <div class="gesture"><div class="g-icon">✌️↕</div><div class="g-text"><strong>두 손가락 스와이프</strong> — 스크롤</div></div>
+      <div class="gesture"><div class="g-icon">🤏</div><div class="g-text"><strong>핀치</strong> — 줌 (세 손가락 탭으로 리셋)</div></div>
+    </div>
+    <button class="btn" id="onboard-ok">확인</button>
+  </div>
+</div>
+
+<!-- Confirm dialog -->
 <div class="overlay" id="ov-confirm">
   <div class="dialog">
     <p>서버를 종료할까요?</p>
@@ -154,55 +221,64 @@
   </div>
 </div>
 
+<!-- Reconnect overlay -->
 <div class="overlay" id="ov-recon">
   <div class="spin"></div>
-  <div id="recon-msg" style="color:#ccc;font-size:15px;">재연결 중...</div>
+  <div id="recon-msg" style="color:var(--text-mid);font-size:14px;">재연결 중...</div>
 </div>
 
 <script>
 (function(){
-  var ws, token, sW=1920, sH=1080, reconN=0, fCount=0, fpsT=Date.now();
-  var rcMode=false, tbOpen=false, infoOpen=false;
+  var ws,token,sW=1920,sH=1080,reconN=0,fCount=0,fpsT=Date.now();
+  var rcMode=false,tbOpen=false,infoOpen=false;
   var mods={ctrl:false,alt:false,meta:false,shift:false};
   var hasTouch=navigator.maxTouchPoints>0;
-  var zoom=1, panX=0, panY=0; // zoom/pan state
+  var zoom=1,panX=0,panY=0;
 
-  // Elements
-  var login=document.getElementById('login'), stream=document.getElementById('stream');
-  var pwIn=document.getElementById('pw'), goBtn=document.getElementById('go'), errEl=document.getElementById('err');
-  var cvs=document.getElementById('cvs'), ctx=cvs.getContext('2d');
+  var login=document.getElementById('login'),stream=document.getElementById('stream');
+  var pwIn=document.getElementById('pw'),goBtn=document.getElementById('go'),errEl=document.getElementById('err');
+  var cvs=document.getElementById('cvs'),ctx=cvs.getContext('2d');
   var touchDot=document.getElementById('touch-dot');
   var inputToast=document.getElementById('input-toast');
   var zoomBadge=document.getElementById('zoom-badge');
   var cvsWrap=document.getElementById('cvs-wrap');
   var hinput=document.getElementById('hinput');
-  var infoEl=document.getElementById('info');
+  var infoPanel=document.getElementById('info-panel');
   var toolbar=document.getElementById('toolbar');
   var btnTb=document.getElementById('btn-tb');
-  var ovConfirm=document.getElementById('ov-confirm'), ovRecon=document.getElementById('ov-recon');
+  var zResetBtn=document.getElementById('tb-zreset');
+  var panel=document.getElementById('panel'),panelItems=document.getElementById('panel-items');
+  var ovConfirm=document.getElementById('ov-confirm'),ovRecon=document.getElementById('ov-recon');
   var reconMsg=document.getElementById('recon-msg');
 
-  if(hasTouch){ btnTb.style.display=''; tbOpen=true; toolbar.classList.add('show'); btnTb.classList.add('on'); }
+  if(hasTouch){btnTb.style.display='';tbOpen=true;toolbar.classList.add('show');btnTb.classList.add('on');}
 
-  // --- Auth ---
+  // Onboarding — show once
+  var onboard=document.getElementById('onboard');
+  if(hasTouch&&!localStorage.getItem('rd-onboarded')){
+    onboard.classList.add('show');
+  }
+  document.getElementById('onboard-ok').onclick=function(){onboard.classList.remove('show');localStorage.setItem('rd-onboarded','1');};
+
+  // Auth
   async function auth(){
-    if(!pwIn.value)return; goBtn.disabled=true; errEl.style.display='none';
+    if(!pwIn.value)return;goBtn.disabled=true;errEl.style.display='none';
     try{
       var r=await fetch('/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwIn.value})});
       var d=await r.json();
-      if(d.type==='auth-ok'){ token=d.token; login.style.display='none'; stream.style.display='flex'; startWs(); }
-      else{ errEl.style.display='block'; goBtn.disabled=false; }
-    }catch(e){ errEl.textContent='연결 실패'; errEl.style.display='block'; goBtn.disabled=false; }
+      if(d.type==='auth-ok'){token=d.token;login.style.display='none';stream.style.display='flex';startWs();}
+      else{errEl.style.display='block';goBtn.disabled=false;}
+    }catch(e){errEl.textContent='연결 실패';errEl.style.display='block';goBtn.disabled=false;}
   }
   goBtn.onclick=auth;
   pwIn.onkeydown=function(e){if(e.key==='Enter')auth();};
 
-  // --- WebSocket ---
+  // WebSocket
   function startWs(){
     ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host);
-    ws.onopen=function(){ reconN=0; ovRecon.classList.remove('show'); ws.send(JSON.stringify({type:'auth',token:token})); };
+    ws.onopen=function(){reconN=0;ovRecon.classList.remove('show');ws.send(JSON.stringify({type:'auth',token:token}));};
     ws.onmessage=function(ev){
-      var m; try{m=JSON.parse(ev.data);}catch(e){return;}
+      var m;try{m=JSON.parse(ev.data);}catch(e){return;}
       if(m.type==='auth-fail'){token=null;login.style.display='flex';stream.style.display='none';errEl.textContent='세션 만료';errEl.style.display='block';goBtn.disabled=false;}
       else if(m.type==='screen-info'){sW=m.width;sH=m.height;cvs.width=m.width;cvs.height=m.height;}
       else if(m.type==='frame'){renderFrame(m.data);}
@@ -218,24 +294,21 @@
   }
   function recon(){
     if(reconN>=10){reconMsg.textContent='연결 실패. 새로고침 해주세요.';ovRecon.classList.add('show');return;}
-    reconN++; reconMsg.textContent='재연결 중... ('+reconN+'/10)'; ovRecon.classList.add('show');
+    reconN++;reconMsg.textContent='재연결 중... ('+reconN+'/10)';ovRecon.classList.add('show');
     setTimeout(startWs,3000);
   }
 
-  // --- Render ---
+  // Render
   var img=new Image();
   img.onload=function(){ctx.drawImage(img,0,0,cvs.width,cvs.height);fCount++;var n=Date.now();if(n-fpsT>=1000){document.getElementById('d-fps').textContent=fCount;fCount=0;fpsT=n;}};
   function renderFrame(b64){img.src='data:image/jpeg;base64,'+b64;}
 
-  // --- Helpers ---
+  // Helpers
   function ratio(e){
     var wr=cvsWrap.getBoundingClientRect();
-    // Convert screen point to wrapper-local, then undo zoom transform
     var localX=((e.clientX-wr.left)-panX)/zoom;
     var localY=((e.clientY-wr.top)-panY)/zoom;
-    // Now localX/localY are in the un-zoomed canvas CSS space
-    // Account for object-fit:contain letterboxing
-    var ca=cvs.width/cvs.height, ra=wr.width/wr.height;
+    var ca=cvs.width/cvs.height,ra=wr.width/wr.height;
     var rw,rh,ox,oy;
     if(ca>ra){rw=wr.width;rh=wr.width/ca;ox=0;oy=(wr.height-rh)/2;}
     else{rh=wr.height;rw=wr.height*ca;ox=(wr.width-rw)/2;oy=0;}
@@ -243,62 +316,54 @@
   }
   function si(m){if(ws&&ws.readyState===1)ws.send(JSON.stringify(m));}
 
-  // Touch dot indicator
+  // Touch dot
   var dotTimer;
   function showDot(x,y){
     touchDot.style.left=x+'px';touchDot.style.top=y+'px';
     touchDot.classList.add('show');touchDot.classList.remove('fade');
     clearTimeout(dotTimer);
-    dotTimer=setTimeout(function(){touchDot.classList.add('fade');setTimeout(function(){touchDot.classList.remove('show','fade');},300);},500);
+    dotTimer=setTimeout(function(){touchDot.classList.add('fade');setTimeout(function(){touchDot.classList.remove('show','fade');},250);},400);
   }
 
   // Input toast
-  var toastTimer, toastBuf='', composingText='';
+  var toastTimer,toastBuf='',composingText='';
   function updateToast(){
-    var display=toastBuf+(composingText?composingText:'');
+    var display=toastBuf+(composingText||'');
     if(!display){inputToast.classList.remove('show');return;}
     inputToast.textContent=display;
     inputToast.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer=setTimeout(function(){inputToast.classList.remove('show');toastBuf='';composingText='';},1500);
   }
-  function appendToast(text){toastBuf+=text;updateToast();}
+  function appendToast(t){toastBuf+=t;updateToast();}
   function backspaceToast(){if(toastBuf.length>0){toastBuf=toastBuf.slice(0,-1);updateToast();}}
-
-  // Flush composing text immediately
   function flushInput(){
-    if(hinput.value){
-      si({type:'type-text',text:hinput.value});
-      toastBuf+=hinput.value;
-      hinput.value='';
-      composingText='';
-      composing=false;
-      updateToast();
-    }
+    if(hinput.value){si({type:'type-text',text:hinput.value});toastBuf+=hinput.value;hinput.value='';composingText='';composing=false;updateToast();}
   }
 
-  // Zoom/pan — canvas always keeps object-fit:contain, only transform changes
+  // Zoom
   function applyZoom(){
-    if(zoom<=1){zoom=1;panX=0;panY=0;cvs.style.transform='';zoomBadge.classList.remove('show');return;}
+    if(zoom<=1){zoom=1;panX=0;panY=0;cvs.style.transform='';zoomBadge.classList.remove('show');zResetBtn.style.display='none';return;}
     var wr=cvsWrap.getBoundingClientRect();
-    var maxPX=wr.width*(zoom-1), maxPY=wr.height*(zoom-1);
+    var maxPX=wr.width*(zoom-1),maxPY=wr.height*(zoom-1);
     panX=Math.max(-maxPX,Math.min(0,panX));panY=Math.max(-maxPY,Math.min(0,panY));
     cvs.style.transform='translate('+panX+'px,'+panY+'px) scale('+zoom+')';
     zoomBadge.textContent=zoom.toFixed(1)+'x';zoomBadge.classList.add('show');
+    zResetBtn.style.display='';
   }
-  function zoomAt(newZoom,cx,cy){
+  function zoomAt(nz,cx,cy){
     var wr=cvsWrap.getBoundingClientRect();
-    var px=cx-wr.left, py=cy-wr.top;
-    var contentX=(px-panX)/zoom, contentY=(py-panY)/zoom;
-    zoom=Math.max(1,Math.min(5,newZoom));
-    panX=px-contentX*zoom; panY=py-contentY*zoom;
+    var px=cx-wr.left,py=cy-wr.top;
+    var cx2=(px-panX)/zoom,cy2=(py-panY)/zoom;
+    zoom=Math.max(1,Math.min(5,nz));
+    panX=px-cx2*zoom;panY=py-cy2*zoom;
     applyZoom();
   }
   function getMods(){var a=[];if(mods.ctrl)a.push('ctrl');if(mods.alt)a.push('alt');if(mods.meta)a.push('meta');if(mods.shift)a.push('shift');return a;}
   function clearMods(){mods.ctrl=mods.alt=mods.meta=mods.shift=false;document.querySelectorAll('.mod').forEach(function(b){b.classList.remove('on');});}
   function sKey(k,ex){var m=getMods();if(ex)m=m.concat(ex);si({type:'key-down',key:k,modifiers:m});si({type:'key-up',key:k});clearMods();}
 
-  // --- Mouse ---
+  // Mouse
   var lmt=0;
   cvs.addEventListener('mousemove',function(e){var n=Date.now();if(n-lmt<30)return;lmt=n;var p=ratio(e);si({type:'mouse-move',x:p.x,y:p.y});});
   cvs.addEventListener('mousedown',function(e){e.preventDefault();var p=ratio(e);si({type:'mouse-down',x:p.x,y:p.y,button:e.button===2?'right':e.button===1?'middle':'left'});});
@@ -306,7 +371,7 @@
   cvs.addEventListener('wheel',function(e){e.preventDefault();var p=ratio(e);si({type:'mouse-scroll',x:p.x,y:p.y,deltaY:Math.sign(e.deltaY)*Math.min(Math.abs(e.deltaY),10)});},{passive:false});
   cvs.addEventListener('contextmenu',function(e){e.preventDefault();});
 
-  // --- Keyboard ---
+  // Keyboard
   document.addEventListener('keydown',function(e){
     if(stream.style.display==='none'||e.target===hinput)return;
     if(['F5','F11','F12'].indexOf(e.key)>=0||(e.ctrlKey&&'rwtnl'.indexOf(e.key.toLowerCase())>=0))e.preventDefault();
@@ -314,199 +379,132 @@
   });
   document.addEventListener('keyup',function(e){if(stream.style.display==='none'||e.target===hinput)return;si({type:'key-up',key:e.key});});
 
-  // --- Touch ---
-  var tsp=null,tmoved=false,ltmt=0;
-  var pinchStartDist=0, pinchStartZoom=1;
-
+  // Touch
+  var tsp=null,tmoved=false,ltmt=0,pinchSD=0,pinchSZ=1;
   cvs.addEventListener('touchstart',function(e){
-    e.preventDefault();
-    flushInput();
-    hinput.blur();
+    e.preventDefault();flushInput();hinput.blur();
     if(e.touches.length===1){
       var t=e.touches[0],p=ratio(t);
       tsp={x:p.x,y:p.y,px:t.clientX,py:t.clientY};tmoved=false;
-      si({type:'mouse-move',x:p.x,y:p.y});
-      showDot(t.clientX,t.clientY);
+      si({type:'mouse-move',x:p.x,y:p.y});showDot(t.clientX,t.clientY);
     }else if(e.touches.length===2){
-      // Start pinch zoom
       tsp=null;tmoved=false;
       var a=e.touches[0],b=e.touches[1];
-      pinchStartDist=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
-      pinchStartZoom=zoom;
-      cvs._2fStart={y:(a.clientY+b.clientY)/2,x:(a.clientX+b.clientX)/2};
-    }else if(e.touches.length===3){
-      // 3-finger tap = reset zoom
-      zoom=1;panX=0;panY=0;applyZoom();
-    }
+      pinchSD=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+      pinchSZ=zoom;
+      cvs._2f={y:(a.clientY+b.clientY)/2,x:(a.clientX+b.clientX)/2};
+    }else if(e.touches.length===3){zoom=1;panX=0;panY=0;applyZoom();}
   },{passive:false});
 
   cvs.addEventListener('touchmove',function(e){
     e.preventDefault();var n=Date.now();if(n-ltmt<16)return;ltmt=n;
     if(e.touches.length===1&&tsp){
-      var t=e.touches[0];
-      showDot(t.clientX,t.clientY);
+      var t=e.touches[0];showDot(t.clientX,t.clientY);
       if(Math.abs(t.clientX-tsp.px)>10||Math.abs(t.clientY-tsp.py)>10){
         if(!tmoved){tmoved=true;si({type:'mouse-down',x:tsp.x,y:tsp.y,button:'left'});}
         var p=ratio(t);si({type:'mouse-move',x:p.x,y:p.y});
       }
-    }else if(e.touches.length===2&&cvs._2fStart){
+    }else if(e.touches.length===2&&cvs._2f){
       var a=e.touches[0],b=e.touches[1];
       var dist=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
-      var midY=(a.clientY+b.clientY)/2;
-
-      var midX2=(a.clientX+b.clientX)/2;
-
-      // Pinch zoom — centered on pinch midpoint
-      if(pinchStartDist>0){
-        var scale=dist/pinchStartDist;
-        zoomAt(pinchStartZoom*scale, midX2, midY);
-      }
-
-      // 2-finger vertical swipe = scroll (only when not zoomed)
+      var midX=(a.clientX+b.clientX)/2,midY=(a.clientY+b.clientY)/2;
+      if(pinchSD>0){zoomAt(pinchSZ*(dist/pinchSD),midX,midY);}
       if(zoom<=1){
-        var dy=midY-cvs._2fStart.y;
-        cvs._2fStart.y=midY;
-        if(Math.abs(dy)>2){
-          var mid=ratio({clientX:midX2,clientY:midY});
-          si({type:'mouse-scroll',x:mid.x,y:mid.y,deltaY:dy>0?-2:2});
-        }
+        var dy=midY-cvs._2f.y;cvs._2f.y=midY;
+        if(Math.abs(dy)>2){var mid=ratio({clientX:midX,clientY:midY});si({type:'mouse-scroll',x:mid.x,y:mid.y,deltaY:dy>0?-2:2});}
       }else{
-        // When zoomed, 2-finger drag = pan
-        var dx=midX2-cvs._2fStart.x;
-        var dy2=midY-cvs._2fStart.y;
-        cvs._2fStart.x=midX2;
-        cvs._2fStart.y=midY;
-        panX+=dx;panY+=dy2;applyZoom();
+        var dx=midX-cvs._2f.x,dy2=midY-cvs._2f.y;
+        cvs._2f.x=midX;cvs._2f.y=midY;panX+=dx;panY+=dy2;applyZoom();
       }
     }
   },{passive:false});
 
   cvs.addEventListener('touchend',function(e){
-    e.preventDefault();
-    cvs._2fStart=null;pinchStartDist=0;
+    e.preventDefault();cvs._2f=null;pinchSD=0;
     if(tsp){
       if(tmoved){var p=e.changedTouches.length?ratio(e.changedTouches[0]):tsp;si({type:'mouse-up',x:p.x,y:p.y,button:'left'});}
-      else{
-        showDot(tsp.px||0,tsp.py||0);
-        si({type:'mouse-click',x:tsp.x,y:tsp.y,button:rcMode?'right':'left'});
-        if(rcMode){rcMode=false;document.getElementById('tb-rc').classList.remove('on');}
-      }
+      else{showDot(tsp.px,tsp.py);si({type:'mouse-click',x:tsp.x,y:tsp.y,button:rcMode?'right':'left'});if(rcMode){rcMode=false;document.getElementById('tb-rc').classList.remove('on');}}
       tsp=null;tmoved=false;
     }
   },{passive:false});
 
-  // Long press = right click
   var lpt;
   cvs.addEventListener('touchstart',function(e){if(e.touches.length===1)lpt=setTimeout(function(){if(tsp&&!tmoved){showDot(tsp.px,tsp.py);si({type:'mouse-click',x:tsp.x,y:tsp.y,button:'right'});tsp=null;}},600);},{passive:true});
   cvs.addEventListener('touchmove',function(){clearTimeout(lpt);},{passive:true});
   cvs.addEventListener('touchend',function(){clearTimeout(lpt);},{passive:true});
 
-  // --- Top controls ---
-  document.getElementById('btn-info').onclick=function(e){e.stopPropagation();infoOpen=!infoOpen;infoEl.classList.toggle('show',infoOpen);this.classList.toggle('on',infoOpen);};
+  // Top controls
+  document.getElementById('btn-info').onclick=function(e){e.stopPropagation();infoOpen=!infoOpen;infoPanel.classList.toggle('show',infoOpen);this.classList.toggle('on',infoOpen);};
   btnTb.onclick=function(e){e.stopPropagation();tbOpen=!tbOpen;toolbar.classList.toggle('show',tbOpen);this.classList.toggle('on',tbOpen);};
 
-  // --- Toolbar buttons ---
+  // Toolbar buttons
   function tbClick(id,fn){
     var el=document.getElementById(id);
     function run(e){e.preventDefault();e.stopPropagation();flushInput();el.classList.add('pressed');setTimeout(function(){el.classList.remove('pressed');},150);fn();}
     el.onclick=run;el.ontouchstart=run;
   }
-
   tbClick('tb-kb',function(){hinput.value='';hinput.focus();});
   tbClick('tb-rc',function(){rcMode=!rcMode;document.getElementById('tb-rc').classList.toggle('on',rcMode);});
   tbClick('tb-mc',function(){si({type:'key-down',key:'F3',modifiers:[]});si({type:'key-up',key:'F3'});});
   tbClick('tb-zreset',function(){zoom=1;panX=0;panY=0;applyZoom();});
 
-  // App switcher
-  var appList=document.getElementById('app-list'), appItems=document.getElementById('app-items');
-  tbClick('tb-apps', async function(){
-    if(appList.classList.contains('show')){appList.classList.remove('show');return;}
-    document.querySelector('#app-list .app-header span').textContent='실행 중인 앱';
-    appItems.innerHTML='<div style="padding:16px;color:#888;">로딩 중...</div>';
-    appList.classList.add('show');
+  // Panel (shared for apps/monitors)
+  function closePanel(){panel.classList.remove('show');}
+  document.getElementById('panel-close').onclick=closePanel;
+
+  tbClick('tb-apps',async function(){
+    if(panel.classList.contains('show')){closePanel();return;}
+    document.getElementById('panel-title').textContent='실행 중인 앱';
+    panelItems.innerHTML='<div class="p-item" style="color:var(--text-dim);">불러오는 중...</div>';
+    panel.classList.add('show');
     try{
       var r=await fetch('/apps',{headers:{'Authorization':'Bearer '+token}});
-      var d=await r.json();
-      appItems.innerHTML='';
+      var d=await r.json();panelItems.innerHTML='';
       d.apps.forEach(function(app){
         var wrap=document.createElement('div');
-        var el=document.createElement('div');
-        el.className='app-item';
-        var nameSpan=document.createElement('span');
-        nameSpan.className='app-name';
-        nameSpan.textContent=app.name;
-        el.appendChild(nameSpan);
-
+        var el=document.createElement('div');el.className='p-item';
+        var name=document.createElement('span');name.textContent=app.name;name.style.fontWeight='500';
+        el.appendChild(name);
         var wins=app.windows||[];
         if(wins.length>1){
-          // Multiple windows — show count, click to expand
-          var countSpan=document.createElement('span');
-          countSpan.className='app-win-count';
-          countSpan.textContent='('+wins.length+'개 윈도우)';
-          el.appendChild(countSpan);
-
-          var winList=document.createElement('div');
-          winList.className='win-list';
-          wins.forEach(function(wName,idx){
-            var wi=document.createElement('div');
-            wi.className='win-item';
-            wi.textContent=(idx+1)+'. '+wName;
-            wi.onclick=function(e){
-              e.stopPropagation();
-              si({type:'activate-app',name:app.name,window:String(idx+1)});
-              appList.classList.remove('show');
-            };
-            winList.appendChild(wi);
+          var cnt=document.createElement('span');cnt.className='p-count';cnt.textContent='('+wins.length+'개)';
+          el.appendChild(cnt);
+          var wl=document.createElement('div');wl.className='win-list';
+          wins.forEach(function(wn,idx){
+            var wi=document.createElement('div');wi.className='p-win';wi.textContent=wn;
+            wi.onclick=function(e){e.stopPropagation();si({type:'activate-app',name:app.name,window:String(idx+1)});closePanel();};
+            wl.appendChild(wi);
           });
-
-          el.onclick=function(){winList.classList.toggle('show');};
-          wrap.appendChild(el);
-          wrap.appendChild(winList);
-        } else {
-          // Single or no window — click to activate directly
-          if(wins.length===1){
-            var sub=document.createElement('div');
-            sub.style.cssText='font-size:12px;color:#888;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-            sub.textContent=wins[0];
-            el.appendChild(sub);
-          }
-          el.onclick=function(){
-            si({type:'activate-app',name:app.name});
-            appList.classList.remove('show');
-          };
+          el.onclick=function(){wl.classList.toggle('show');};
+          wrap.appendChild(el);wrap.appendChild(wl);
+        }else{
+          if(wins.length===1){var sub=document.createElement('div');sub.className='p-sub';sub.textContent=wins[0];el.appendChild(sub);}
+          el.onclick=function(){si({type:'activate-app',name:app.name});closePanel();};
           wrap.appendChild(el);
         }
-        appItems.appendChild(wrap);
+        panelItems.appendChild(wrap);
       });
-    }catch(e){appItems.innerHTML='<div style="padding:16px;color:#f66;">불러오기 실패</div>';}
+    }catch(e){panelItems.innerHTML='<div class="p-item" style="color:var(--danger);">불러오기 실패</div>';}
   });
-  document.getElementById('app-close').onclick=function(){appList.classList.remove('show');};
 
-  // Display switcher — reuses app-list panel
-  tbClick('tb-disp', async function(){
-    if(appList.classList.contains('show')){appList.classList.remove('show');return;}
-    appItems.innerHTML='<div style="padding:16px;color:#888;">로딩 중...</div>';
-    document.querySelector('#app-list .app-header span').textContent='모니터 선택';
-    appList.classList.add('show');
+  tbClick('tb-disp',async function(){
+    if(panel.classList.contains('show')){closePanel();return;}
+    document.getElementById('panel-title').textContent='모니터 선택';
+    panelItems.innerHTML='<div class="p-item" style="color:var(--text-dim);">불러오는 중...</div>';
+    panel.classList.add('show');
     try{
       var r=await fetch('/displays',{headers:{'Authorization':'Bearer '+token}});
-      var d=await r.json();
-      appItems.innerHTML='';
+      var d=await r.json();panelItems.innerHTML='';
       d.displays.forEach(function(disp){
-        var el=document.createElement('div');
-        el.className='app-item';
-        el.textContent=disp.name+' ('+disp.id+')';
-        el.onclick=function(){
-          si({type:'switch-display',id:disp.id});
-          appList.classList.remove('show');
-        };
-        appItems.appendChild(el);
+        var el=document.createElement('div');el.className='p-item';el.textContent=disp.name;
+        el.onclick=function(){si({type:'switch-display',id:disp.id});closePanel();};
+        panelItems.appendChild(el);
       });
-      if(d.displays.length===0)appItems.innerHTML='<div style="padding:16px;color:#888;">모니터를 찾을 수 없습니다</div>';
-    }catch(e){appItems.innerHTML='<div style="padding:16px;color:#f66;">불러오기 실패</div>';}
+      if(!d.displays.length)panelItems.innerHTML='<div class="p-item" style="color:var(--text-dim);">모니터 없음</div>';
+    }catch(e){panelItems.innerHTML='<div class="p-item" style="color:var(--danger);">불러오기 실패</div>';}
   });
 
-  document.querySelectorAll('.tb[data-key]').forEach(function(b){
+  document.querySelectorAll('.tbtn[data-key]').forEach(function(b){
     var k=b.getAttribute('data-key');
     function run(e){e.preventDefault();e.stopPropagation();b.classList.add('pressed');setTimeout(function(){b.classList.remove('pressed');},150);sKey(k);}
     b.onclick=run;b.ontouchstart=run;
@@ -516,34 +514,19 @@
     b.onclick=b.ontouchstart=function(e){e.preventDefault();e.stopPropagation();mods[m]=!mods[m];b.classList.toggle('on',mods[m]);};
   });
 
-  // Hidden input
-  // Korean composition handling
+  // Hidden input + Korean composition
   var composing=false;
   hinput.addEventListener('blur',function(){flushInput();});
   hinput.addEventListener('compositionstart',function(){composing=true;});
-  hinput.addEventListener('compositionupdate',function(e){
-    composingText=e.data||'';
-    updateToast();
-  });
+  hinput.addEventListener('compositionupdate',function(e){composingText=e.data||'';updateToast();});
   hinput.addEventListener('compositionend',function(e){
-    composing=false;
-    var v=e.data||'';
-    if(v.length>0){
-      si({type:'type-text',text:v});
-      toastBuf+=v;
-      composingText='';
-      updateToast();
-    }
+    composing=false;var v=e.data||'';
+    if(v.length>0){si({type:'type-text',text:v});toastBuf+=v;composingText='';updateToast();}
     hinput.value='';
   });
   hinput.addEventListener('input',function(){
-    if(composing)return; // compositionupdate handles preview
-    var v=hinput.value;
-    if(v.length>0){
-      si({type:'type-text',text:v});
-      appendToast(v);
-      hinput.value='';
-    }
+    if(composing)return;
+    var v=hinput.value;if(v.length>0){si({type:'type-text',text:v});appendToast(v);hinput.value='';}
   });
   hinput.addEventListener('keydown',function(e){
     if(composing)return;
@@ -553,7 +536,7 @@
     else if(e.key==='Escape'){e.preventDefault();sKey('Escape');}
   });
 
-  // FPS
+  // FPS slider
   var fpsSl=document.getElementById('fps-sl'),fpsV=document.getElementById('fps-v');
   fpsSl.addEventListener('input',function(){fpsV.textContent=fpsSl.value;si({type:'set-fps',fps:parseInt(fpsSl.value,10)});});
 
@@ -563,7 +546,7 @@
   document.getElementById('cf-yes').onclick=async function(){
     try{await fetch('/shutdown',{method:'POST',headers:{'Authorization':'Bearer '+token}});}catch(e){}
     ovConfirm.classList.remove('show');token=null;if(ws)ws.close();
-    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#888;font-size:16px;">서버가 종료되었습니다.</div>';
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--text-dim);font-size:15px;font-family:var(--font);">서버가 종료되었습니다.</div>';
   };
 })();
 </script>
