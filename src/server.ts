@@ -7,7 +7,7 @@ import { verifyPassword, createSessionToken, isValidToken } from './auth';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize,
-  ensureMacHelper, getMainDisplayPoints,
+  ensureMacHelper, getMainDisplayPoints, getDisplayForPoint,
 } from './input-handler';
 import { execSync } from 'child_process';
 import { startCapture, getScreenSize, listDisplays, CaptureOptions, CaptureSession } from './capture';
@@ -44,7 +44,6 @@ function getSystemStats() {
   return { cpuPercent, memPercent, memUsedGB, memTotalGB };
 }
 
-// Get window position and find which display index it's on
 function getWindowDisplayIndex(appName: string): number | null {
   try {
     const safe = appName.replace(/[^a-zA-Z0-9 \-_.가-힣]/g, '');
@@ -54,35 +53,9 @@ function getWindowDisplayIndex(appName: string): number | null {
     ).trim();
     const [wx, wy] = posOut.split(',').map((s: string) => parseInt(s.trim(), 10));
     if (isNaN(wx) || isNaN(wy)) return null;
-
-    // Get all display bounds to find which contains the window
-    const boundsOut = execSync(
-      `osascript -l JavaScript -e '
-        ObjC.import("CoreGraphics");
-        var n = $.CGGetActiveDisplayList.maximum;
-        var ids = Ref();
-        var count = Ref();
-        $.CGGetActiveDisplayList(10, ids, count);
-        var c = count[0];
-        var result = [];
-        for (var i = 0; i < c; i++) {
-          var b = $.CGDisplayBounds(ids[i]);
-          result.push(b.origin.x + "," + b.origin.y + "," + b.size.width + "," + b.size.height);
-        }
-        result.join("\\n");
-      '`,
-      { encoding: 'utf-8', timeout: 3000 }
-    ).trim();
-
-    const displays = boundsOut.split('\n');
-    for (let i = 0; i < displays.length; i++) {
-      const [dx, dy, dw, dh] = displays[i].split(',').map(Number);
-      if (wx >= dx && wx < dx + dw && wy >= dy && wy < dy + dh) {
-        return i;
-      }
-    }
-  } catch { /* ignore */ }
-  return null;
+    const idx = getDisplayForPoint(wx, wy);
+    return idx >= 0 ? idx : null;
+  } catch { return null; }
 }
 
 export async function createServer(options: ServerOptions): Promise<ServerInstance> {

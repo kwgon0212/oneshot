@@ -48,6 +48,27 @@ extern CFArrayRef CGSCopyManagedDisplaySpaces(CGSConnectionID cid);
 int main(int argc, char *argv[]) {
     if (argc < 2) return 1;
 
+    if (strcmp(argv[1], "display-for-point") == 0 && argc >= 4) {
+        double x = atof(argv[2]), y = atof(argv[3]);
+        uint32_t totalCount = 0;
+        CGGetActiveDisplayList(0, NULL, &totalCount);
+        if (totalCount == 0) { printf("-1\\n"); return 0; }
+        CGDirectDisplayID *allDisplays = (CGDirectDisplayID *)malloc(totalCount * sizeof(CGDirectDisplayID));
+        CGGetActiveDisplayList(totalCount, allDisplays, &totalCount);
+        for (uint32_t i = 0; i < totalCount; i++) {
+            CGRect bounds = CGDisplayBounds(allDisplays[i]);
+            if (x >= bounds.origin.x && x < bounds.origin.x + bounds.size.width &&
+                y >= bounds.origin.y && y < bounds.origin.y + bounds.size.height) {
+                printf("%d\\n", (int)i);
+                free(allDisplays);
+                return 0;
+            }
+        }
+        free(allDisplays);
+        printf("-1\\n");
+        return 0;
+    }
+
     if (strcmp(argv[1], "info") == 0) {
         CGDirectDisplayID mainDisplay = CGMainDisplayID();
         size_t pw = CGDisplayPixelsWide(mainDisplay);
@@ -193,6 +214,14 @@ function macHelper(args: string[]): void {
   }
 }
 
+
+export function getDisplayForPoint(x: number, y: number): number {
+  if (!helperReady) return -1;
+  try {
+    const out = execFileSync(HELPER_PATH, ['display-for-point', String(x), String(y)], { encoding: 'utf-8', timeout: 2000 }).trim();
+    return parseInt(out, 10);
+  } catch { return -1; }
+}
 
 // Returns main display size in POINTS (not pixels) for correct coordinate mapping
 export function getMainDisplayPoints(): { width: number; height: number } | null {
