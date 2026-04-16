@@ -44,7 +44,6 @@ const HELPER_SOURCE = `
 typedef int CGSConnectionID;
 extern CGSConnectionID _CGSDefaultConnection(void);
 extern CFArrayRef CGSCopyManagedDisplaySpaces(CGSConnectionID cid);
-extern void CGSManagedDisplaySetCurrentSpace(CGSConnectionID cid, CFStringRef displayUUID, uint64_t spaceID);
 
 int main(int argc, char *argv[]) {
     if (argc < 2) return 1;
@@ -82,16 +81,19 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    if (strcmp(argv[1], "switch") == 0 && argc >= 3) {
-        int target = atoi(argv[2]) - 1;
+    if (strcmp(argv[1], "current-space") == 0) {
         CGSConnectionID cid = _CGSDefaultConnection();
         CFArrayRef displays = CGSCopyManagedDisplaySpaces(cid);
-        if (!displays) return 1;
+        if (!displays) { printf("0\\n"); return 0; }
 
         CFDictionaryRef disp = (CFDictionaryRef)CFArrayGetValueAtIndex(displays, 0);
-        CFStringRef displayID = (CFStringRef)CFDictionaryGetValue(disp, CFSTR("Display Identifier"));
         CFArrayRef spaces = (CFArrayRef)CFDictionaryGetValue(disp, CFSTR("Spaces"));
-        if (!spaces || !displayID) { CFRelease(displays); return 1; }
+        CFDictionaryRef curSpace = (CFDictionaryRef)CFDictionaryGetValue(disp, CFSTR("Current Space"));
+        if (!spaces || !curSpace) { CFRelease(displays); printf("0\\n"); return 0; }
+
+        CFNumberRef curIdRef = (CFNumberRef)CFDictionaryGetValue(curSpace, CFSTR("ManagedSpaceID"));
+        int64_t curId = 0;
+        if (curIdRef) CFNumberGetValue(curIdRef, kCFNumberSInt64Type, &curId);
 
         int idx = 0;
         for (CFIndex j = 0; j < CFArrayGetCount(spaces); j++) {
@@ -100,18 +102,15 @@ int main(int argc, char *argv[]) {
             int type = 0;
             if (typeRef) CFNumberGetValue(typeRef, kCFNumberIntType, &type);
             if (type == 0) {
-                if (idx == target) {
-                    CFNumberRef idRef = (CFNumberRef)CFDictionaryGetValue(space, CFSTR("ManagedSpaceID"));
-                    if (!idRef) idRef = (CFNumberRef)CFDictionaryGetValue(space, CFSTR("id64"));
-                    uint64_t spaceID = 0;
-                    if (idRef) CFNumberGetValue(idRef, kCFNumberSInt64Type, &spaceID);
-                    if (spaceID) CGSManagedDisplaySetCurrentSpace(cid, displayID, spaceID);
-                    break;
-                }
+                CFNumberRef idRef = (CFNumberRef)CFDictionaryGetValue(space, CFSTR("ManagedSpaceID"));
+                int64_t sid = 0;
+                if (idRef) CFNumberGetValue(idRef, kCFNumberSInt64Type, &sid);
+                if (sid == curId) { printf("%d\\n", idx + 1); CFRelease(displays); return 0; }
                 idx++;
             }
         }
         CFRelease(displays);
+        printf("0\\n");
         return 0;
     }
 
@@ -194,11 +193,25 @@ function macHelper(args: string[]): void {
   }
 }
 
-export function switchToSpace(n: number): void {
-  if (!helperReady) return;
+export function getCurrentSpace(): number {
+  if (!helperReady) return 0;
   try {
-    execFileSync(HELPER_PATH, ['switch', String(n)], { stdio: 'ignore', timeout: 2000 });
-  } catch { /* ignore */ }
+    const out = execFileSync(HELPER_PATH, ['current-space'], { encoding: 'utf-8', timeout: 2000 }).trim();
+    return parseInt(out, 10) || 0;
+  } catch { return 0; }
+}
+
+export function switchToSpace(n: number): void {
+  const current = getCurrentSpace();
+  if (current === 0 || current === n) return;
+  const delta = n - current;
+  const key = delta > 0 ? 'ArrowRight' : 'ArrowLeft';
+  const steps = Math.abs(delta);
+  for (let i = 0; i < steps; i++) {
+    handleKeyDown(key, ['ctrl']);
+    // Small delay between steps so macOS can process each transition
+    try { execSync('sleep 0.3', { stdio: 'ignore' }); } catch { /* ignore */ }
+  }
 }
 
 export function getSpaceCount(): number {
