@@ -24,8 +24,18 @@
   /* Stream */
   #stream { display: none; flex-direction: column; height: 100dvh; height: 100vh; }
   @supports (height: 100dvh) { #stream { height: 100dvh; } }
-  #cvs-wrap { flex: 1; min-height: 0; background: #000; position: relative; }
-  #cvs { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #cvs-wrap { flex: 1; min-height: 0; background: #000; position: relative; overflow: hidden; }
+  #cvs { display: block; transform-origin: 0 0; }
+  #cvs.fit { width: 100%; height: 100%; object-fit: contain; }
+
+  /* Touch indicator */
+  #touch-dot { display: none; position: fixed; width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(74,158,255,0.8); background: rgba(74,158,255,0.25); transform: translate(-50%,-50%); pointer-events: none; z-index: 90; transition: opacity 0.3s; }
+  #touch-dot.show { display: block; }
+  #touch-dot.fade { opacity: 0; }
+
+  /* Zoom indicator */
+  #zoom-badge { display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.75); color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 12px; z-index: 90; pointer-events: none; }
+  #zoom-badge.show { display: block; }
 
   /* Floating controls - top left */
   #ctrl-tl { position: fixed; top: 6px; left: 6px; z-index: 100; display: flex; gap: 6px; }
@@ -84,7 +94,9 @@
 </div>
 
 <div id="stream">
-  <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
+  <div id="cvs-wrap"><canvas id="cvs" class="fit"></canvas></div>
+  <div id="touch-dot"></div>
+  <div id="zoom-badge"></div>
 
   <div id="ctrl-tl">
     <button class="pill pill-red" id="btn-off">종료</button>
@@ -102,6 +114,7 @@
     <button class="tb" id="tb-kb">⌨ 키보드</button>
     <button class="tb" id="tb-apps">앱 전환</button>
     <button class="tb" id="tb-rc">우클릭</button>
+    <button class="tb" id="tb-zreset">줌 리셋</button>
     <button class="tb" data-key="Escape">ESC</button>
     <button class="tb tb-sm mod" data-mod="ctrl">Ctrl</button>
     <button class="tb tb-sm mod" data-mod="alt">Alt</button>
@@ -139,11 +152,15 @@
   var rcMode=false, tbOpen=false, infoOpen=false;
   var mods={ctrl:false,alt:false,meta:false,shift:false};
   var hasTouch=navigator.maxTouchPoints>0;
+  var zoom=1, panX=0, panY=0; // zoom/pan state
 
   // Elements
   var login=document.getElementById('login'), stream=document.getElementById('stream');
   var pwIn=document.getElementById('pw'), goBtn=document.getElementById('go'), errEl=document.getElementById('err');
   var cvs=document.getElementById('cvs'), ctx=cvs.getContext('2d');
+  var touchDot=document.getElementById('touch-dot');
+  var zoomBadge=document.getElementById('zoom-badge');
+  var cvsWrap=document.getElementById('cvs-wrap');
   var hinput=document.getElementById('hinput');
   var infoEl=document.getElementById('info');
   var toolbar=document.getElementById('toolbar');
@@ -205,6 +222,28 @@
     return{x:Math.max(0,Math.min(1,(e.clientX-r.left-ox)/rw)),y:Math.max(0,Math.min(1,(e.clientY-r.top-oy)/rh))};
   }
   function si(m){if(ws&&ws.readyState===1)ws.send(JSON.stringify(m));}
+
+  // Touch dot indicator
+  var dotTimer;
+  function showDot(x,y){
+    touchDot.style.left=x+'px';touchDot.style.top=y+'px';
+    touchDot.classList.add('show');touchDot.classList.remove('fade');
+    clearTimeout(dotTimer);
+    dotTimer=setTimeout(function(){touchDot.classList.add('fade');setTimeout(function(){touchDot.classList.remove('show','fade');},300);},500);
+  }
+
+  // Zoom/pan
+  function applyZoom(){
+    if(zoom<=1){zoom=1;panX=0;panY=0;cvs.classList.add('fit');cvs.style.transform='';cvs.style.width='';cvs.style.height='';zoomBadge.classList.remove('show');return;}
+    cvs.classList.remove('fit');
+    var wr=cvsWrap.getBoundingClientRect();
+    cvs.style.width=wr.width*zoom+'px';cvs.style.height=wr.height*zoom+'px';
+    // Clamp pan
+    var maxPX=wr.width*(zoom-1), maxPY=wr.height*(zoom-1);
+    panX=Math.max(-maxPX,Math.min(0,panX));panY=Math.max(-maxPY,Math.min(0,panY));
+    cvs.style.transform='translate('+panX+'px,'+panY+'px)';
+    zoomBadge.textContent=zoom.toFixed(1)+'x';zoomBadge.classList.add('show');
+  }
   function getMods(){var a=[];if(mods.ctrl)a.push('ctrl');if(mods.alt)a.push('alt');if(mods.meta)a.push('meta');if(mods.shift)a.push('shift');return a;}
   function clearMods(){mods.ctrl=mods.alt=mods.meta=mods.shift=false;document.querySelectorAll('.mod').forEach(function(b){b.classList.remove('on');});}
   function sKey(k,ex){var m=getMods();if(ex)m=m.concat(ex);si({type:'key-down',key:k,modifiers:m});si({type:'key-up',key:k});clearMods();}
@@ -227,51 +266,86 @@
 
   // --- Touch ---
   var tsp=null,tmoved=false,ltmt=0;
+  var pinchStartDist=0, pinchStartZoom=1;
+
   cvs.addEventListener('touchstart',function(e){
     e.preventDefault();
-    // Blur hidden input to prevent keyboard from popping up
     hinput.blur();
     if(e.touches.length===1){
       var t=e.touches[0],p=ratio(t);
       tsp={x:p.x,y:p.y,px:t.clientX,py:t.clientY};tmoved=false;
       si({type:'mouse-move',x:p.x,y:p.y});
+      showDot(t.clientX,t.clientY);
+    }else if(e.touches.length===2){
+      // Start pinch zoom
+      tsp=null;tmoved=false;
+      var a=e.touches[0],b=e.touches[1];
+      pinchStartDist=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+      pinchStartZoom=zoom;
+      cvs._2fStart={y:(a.clientY+b.clientY)/2,x:(a.clientX+b.clientX)/2};
+    }else if(e.touches.length===3){
+      // 3-finger tap = reset zoom
+      zoom=1;panX=0;panY=0;applyZoom();
     }
   },{passive:false});
 
   cvs.addEventListener('touchmove',function(e){
-    e.preventDefault();var n=Date.now();if(n-ltmt<30)return;ltmt=n;
+    e.preventDefault();var n=Date.now();if(n-ltmt<16)return;ltmt=n;
     if(e.touches.length===1&&tsp){
       var t=e.touches[0];
+      showDot(t.clientX,t.clientY);
       if(Math.abs(t.clientX-tsp.px)>10||Math.abs(t.clientY-tsp.py)>10){
         if(!tmoved){tmoved=true;si({type:'mouse-down',x:tsp.x,y:tsp.y,button:'left'});}
         var p=ratio(t);si({type:'mouse-move',x:p.x,y:p.y});
       }
-    }else if(e.touches.length===2){
+    }else if(e.touches.length===2&&cvs._2fStart){
       var a=e.touches[0],b=e.touches[1];
-      var midX=(a.clientX+b.clientX)/2, midY=(a.clientY+b.clientY)/2;
-      // Track 2-finger vertical swipe for scrolling
-      if(!cvs._2fStart){cvs._2fStart={y:midY};return;}
-      var dy=midY-cvs._2fStart.y;
-      cvs._2fStart.y=midY;
-      if(Math.abs(dy)>2){
-        var mid=ratio({clientX:midX,clientY:midY});
-        si({type:'mouse-scroll',x:mid.x,y:mid.y,deltaY:dy>0?-2:2});
+      var dist=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+      var midY=(a.clientY+b.clientY)/2;
+
+      // Pinch zoom
+      if(pinchStartDist>0){
+        var scale=dist/pinchStartDist;
+        zoom=Math.max(1,Math.min(5,pinchStartZoom*scale));
+        applyZoom();
+      }
+
+      // 2-finger vertical swipe = scroll (only when not zoomed)
+      if(zoom<=1){
+        var dy=midY-cvs._2fStart.y;
+        cvs._2fStart.y=midY;
+        if(Math.abs(dy)>2){
+          var mid=ratio({clientX:(a.clientX+b.clientX)/2,clientY:midY});
+          si({type:'mouse-scroll',x:mid.x,y:mid.y,deltaY:dy>0?-2:2});
+        }
+      }else{
+        // When zoomed, 2-finger drag = pan
+        var dx=(a.clientX+b.clientX)/2-cvs._2fStart.x;
+        var dy2=midY-cvs._2fStart.y;
+        cvs._2fStart.x=(a.clientX+b.clientX)/2;
+        cvs._2fStart.y=midY;
+        panX+=dx;panY+=dy2;applyZoom();
       }
     }
   },{passive:false});
 
   cvs.addEventListener('touchend',function(e){
-    e.preventDefault();cvs._2fStart=null;
+    e.preventDefault();
+    cvs._2fStart=null;pinchStartDist=0;
     if(tsp){
       if(tmoved){var p=e.changedTouches.length?ratio(e.changedTouches[0]):tsp;si({type:'mouse-up',x:p.x,y:p.y,button:'left'});}
-      else{si({type:'mouse-click',x:tsp.x,y:tsp.y,button:rcMode?'right':'left'});if(rcMode){rcMode=false;document.getElementById('tb-rc').classList.remove('on');}}
+      else{
+        showDot(tsp.px||0,tsp.py||0);
+        si({type:'mouse-click',x:tsp.x,y:tsp.y,button:rcMode?'right':'left'});
+        if(rcMode){rcMode=false;document.getElementById('tb-rc').classList.remove('on');}
+      }
       tsp=null;tmoved=false;
     }
   },{passive:false});
 
   // Long press = right click
   var lpt;
-  cvs.addEventListener('touchstart',function(e){if(e.touches.length===1)lpt=setTimeout(function(){if(tsp&&!tmoved){si({type:'mouse-click',x:tsp.x,y:tsp.y,button:'right'});tsp=null;}},600);},{passive:true});
+  cvs.addEventListener('touchstart',function(e){if(e.touches.length===1)lpt=setTimeout(function(){if(tsp&&!tmoved){showDot(tsp.px,tsp.py);si({type:'mouse-click',x:tsp.x,y:tsp.y,button:'right'});tsp=null;}},600);},{passive:true});
   cvs.addEventListener('touchmove',function(){clearTimeout(lpt);},{passive:true});
   cvs.addEventListener('touchend',function(){clearTimeout(lpt);},{passive:true});
 
@@ -284,6 +358,7 @@
 
   tbClick('tb-kb',function(){hinput.value='';hinput.focus();});
   tbClick('tb-rc',function(){rcMode=!rcMode;document.getElementById('tb-rc').classList.toggle('on',rcMode);});
+  tbClick('tb-zreset',function(){zoom=1;panX=0;panY=0;applyZoom();});
 
   // App switcher
   var appList=document.getElementById('app-list'), appItems=document.getElementById('app-items');

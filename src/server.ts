@@ -116,26 +116,20 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
       return;
     }
     try {
-      const raw = execSync(
-        `osascript -e 'tell application "System Events" to get {name, displayed name} of every process whose background only is false'`,
-        { encoding: 'utf-8', timeout: 5000 }
-      ).trim();
-      // Parse AppleScript list output: "name1, name2, name3, dispName1, dispName2, dispName3"
-      // Actually the output format from getting two properties is two lists
-      // Let's use a simpler approach
-      const names = execSync(
-        `osascript -e 'set output to ""
-tell application "System Events"
-  set appList to every process whose background only is false
-  repeat with a in appList
-    set output to output & name of a & "\\n"
+      const script = `tell application "System Events"
+  set n to name of every process whose background only is false
+  set o to ""
+  repeat with i in n
+    set o to o & i & linefeed
   end repeat
-end tell
-return output'`,
-        { encoding: 'utf-8', timeout: 5000 }
-      ).trim().split('\n').filter(Boolean);
+  return o
+end tell`;
+      const names = execSync(`osascript -e '${script}'`, {
+        encoding: 'utf-8', timeout: 5000,
+      }).trim().split('\n').filter(Boolean);
       res.json({ apps: names });
-    } catch {
+    } catch (e: any) {
+      console.error('앱 목록 조회 실패:', e.message);
       res.json({ apps: [] });
     }
   });
