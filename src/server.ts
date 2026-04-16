@@ -47,6 +47,22 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
     }
   });
 
+  // Shutdown endpoint
+  app.post('/shutdown', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token || !isValidToken(token, sessionTokens)) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    res.json({ ok: true });
+    // Give response time to send, then shutdown
+    setTimeout(() => {
+      console.log('\n🛑 웹에서 종료 요청됨. 종료 중...');
+      process.exit(0);
+    }, 500);
+  });
+
   // Get screen size for coordinate mapping
   const screenSize = await getScreenSize();
   setScreenSize(screenSize.width, screenSize.height);

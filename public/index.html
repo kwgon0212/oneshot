@@ -28,6 +28,21 @@
   /* Status Bar */
   #status-bar { position: fixed; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-family: monospace; z-index: 100; display: none; }
 
+  /* Shutdown Button */
+  #shutdown-btn { position: fixed; top: 8px; left: 8px; background: rgba(180,40,40,0.8); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; z-index: 100; font-weight: 600; }
+  #shutdown-btn:hover { background: rgba(220,50,50,0.9); }
+
+  /* Confirm Dialog */
+  #confirm-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 300; align-items: center; justify-content: center; }
+  .confirm-box { background: #16213e; padding: 32px; border-radius: 12px; text-align: center; min-width: 280px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  .confirm-box p { margin-bottom: 20px; font-size: 16px; }
+  .confirm-btns { display: flex; gap: 12px; }
+  .confirm-btns button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  #confirm-yes { background: #c0392b; color: #fff; }
+  #confirm-yes:hover { background: #e74c3c; }
+  #confirm-no { background: #444; color: #ddd; }
+  #confirm-no:hover { background: #555; }
+
   /* Mobile Toolbar */
   #mobile-toolbar { display: none; background: #16213e; border-top: 1px solid #333; padding: 6px 8px; z-index: 50; }
   #mobile-toolbar .toolbar-row { display: flex; gap: 6px; align-items: center; }
@@ -72,6 +87,7 @@
     <span id="fps-display">0 FPS</span> |
     <span id="quality-display">Q:75</span>
   </div>
+  <button id="shutdown-btn">종료</button>
 
   <!-- Mobile Toolbar -->
   <div id="mobile-toolbar">
@@ -100,6 +116,18 @@
 
 <!-- Hidden input for mobile keyboard -->
 <input type="text" id="hidden-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+<!-- Confirm Dialog -->
+<div id="confirm-overlay">
+  <div class="confirm-box">
+    <p>원격 데스크톱 서버를 종료할까요?</p>
+    <p style="font-size:12px;color:#888;margin-top:-12px;margin-bottom:16px;">서버가 종료되면 다시 접속할 수 없습니다.</p>
+    <div class="confirm-btns">
+      <button id="confirm-no">취소</button>
+      <button id="confirm-yes">종료</button>
+    </div>
+  </div>
+</div>
 
 <!-- Reconnect Overlay -->
 <div id="reconnect-overlay">
@@ -551,6 +579,38 @@
       stickyMods[mod] = !stickyMods[mod];
       btn.classList.toggle('active', stickyMods[mod]);
     });
+  });
+
+  // --- Shutdown ---
+  var confirmOverlay = document.getElementById('confirm-overlay');
+  var shutdownBtn = document.getElementById('shutdown-btn');
+
+  shutdownBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    confirmOverlay.style.display = 'flex';
+  });
+  // Also handle touch for mobile
+  shutdownBtn.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    confirmOverlay.style.display = 'flex';
+  });
+
+  document.getElementById('confirm-no').addEventListener('click', function() {
+    confirmOverlay.style.display = 'none';
+  });
+
+  document.getElementById('confirm-yes').addEventListener('click', async function() {
+    try {
+      await fetch('/shutdown', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token },
+      });
+    } catch (e) { /* server is shutting down */ }
+    confirmOverlay.style.display = 'none';
+    token = null; // prevent reconnect
+    if (ws) ws.close();
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#aaa;font-size:18px;">서버가 종료되었습니다.</div>';
   });
 
 })();
