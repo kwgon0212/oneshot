@@ -232,17 +232,28 @@
     dotTimer=setTimeout(function(){touchDot.classList.add('fade');setTimeout(function(){touchDot.classList.remove('show','fade');},300);},500);
   }
 
-  // Zoom/pan
+  // Zoom/pan — zoom centers on pinch midpoint
   function applyZoom(){
     if(zoom<=1){zoom=1;panX=0;panY=0;cvs.classList.add('fit');cvs.style.transform='';cvs.style.width='';cvs.style.height='';zoomBadge.classList.remove('show');return;}
     cvs.classList.remove('fit');
     var wr=cvsWrap.getBoundingClientRect();
-    cvs.style.width=wr.width*zoom+'px';cvs.style.height=wr.height*zoom+'px';
-    // Clamp pan
+    cvs.style.width=wr.width+'px';cvs.style.height=wr.height+'px';
+    // Clamp pan so content doesn't go out of view
     var maxPX=wr.width*(zoom-1), maxPY=wr.height*(zoom-1);
     panX=Math.max(-maxPX,Math.min(0,panX));panY=Math.max(-maxPY,Math.min(0,panY));
-    cvs.style.transform='translate('+panX+'px,'+panY+'px)';
+    cvs.style.transform='translate('+panX+'px,'+panY+'px) scale('+zoom+')';
     zoomBadge.textContent=zoom.toFixed(1)+'x';zoomBadge.classList.add('show');
+  }
+  // Zoom toward a specific screen point (pinch center)
+  function zoomAt(newZoom,cx,cy){
+    var wr=cvsWrap.getBoundingClientRect();
+    var px=cx-wr.left, py=cy-wr.top; // point relative to wrapper
+    // Content point under the pinch center before zoom
+    var contentX=(px-panX)/zoom, contentY=(py-panY)/zoom;
+    zoom=Math.max(1,Math.min(5,newZoom));
+    // Adjust pan so the same content point stays under the pinch center
+    panX=px-contentX*zoom; panY=py-contentY*zoom;
+    applyZoom();
   }
   function getMods(){var a=[];if(mods.ctrl)a.push('ctrl');if(mods.alt)a.push('alt');if(mods.meta)a.push('meta');if(mods.shift)a.push('shift');return a;}
   function clearMods(){mods.ctrl=mods.alt=mods.meta=mods.shift=false;document.querySelectorAll('.mod').forEach(function(b){b.classList.remove('on');});}
@@ -303,11 +314,12 @@
       var dist=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
       var midY=(a.clientY+b.clientY)/2;
 
-      // Pinch zoom
+      var midX2=(a.clientX+b.clientX)/2;
+
+      // Pinch zoom — centered on pinch midpoint
       if(pinchStartDist>0){
         var scale=dist/pinchStartDist;
-        zoom=Math.max(1,Math.min(5,pinchStartZoom*scale));
-        applyZoom();
+        zoomAt(pinchStartZoom*scale, midX2, midY);
       }
 
       // 2-finger vertical swipe = scroll (only when not zoomed)
@@ -315,14 +327,14 @@
         var dy=midY-cvs._2fStart.y;
         cvs._2fStart.y=midY;
         if(Math.abs(dy)>2){
-          var mid=ratio({clientX:(a.clientX+b.clientX)/2,clientY:midY});
+          var mid=ratio({clientX:midX2,clientY:midY});
           si({type:'mouse-scroll',x:mid.x,y:mid.y,deltaY:dy>0?-2:2});
         }
       }else{
         // When zoomed, 2-finger drag = pan
-        var dx=(a.clientX+b.clientX)/2-cvs._2fStart.x;
+        var dx=midX2-cvs._2fStart.x;
         var dy2=midY-cvs._2fStart.y;
-        cvs._2fStart.x=(a.clientX+b.clientX)/2;
+        cvs._2fStart.x=midX2;
         cvs._2fStart.y=midY;
         panX+=dx;panY+=dy2;applyZoom();
       }
