@@ -1,9 +1,39 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import https from 'https';
+import http from 'http';
 import { checkPermissions } from './permission-check';
 import { createServer } from './server';
 import { startTunnel, TunnelResult } from './tunnel';
+
+function waitForUrl(url: string, maxRetries = 15): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+    const check = () => {
+      attempts++;
+      const client = url.startsWith('https') ? https : http;
+      const req = client.get(url, { timeout: 3000 }, (res) => {
+        // Any response means the tunnel is live
+        res.resume();
+        resolve();
+      });
+      req.on('error', () => {
+        if (attempts >= maxRetries) {
+          resolve(); // Show URL anyway after max retries
+        } else {
+          setTimeout(check, 1000);
+        }
+      });
+      req.on('timeout', () => {
+        req.destroy();
+        if (attempts >= maxRetries) resolve();
+        else setTimeout(check, 1000);
+      });
+    };
+    check();
+  });
+}
 
 const program = new Command();
 
@@ -42,6 +72,10 @@ program
       server.close();
       process.exit(1);
     }
+
+    // Wait for tunnel to be reachable
+    console.log('⏳ 도메인 준비 대기 중...');
+    await waitForUrl(tunnel.url);
 
     // Copy to clipboard
     try {

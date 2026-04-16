@@ -383,12 +383,18 @@
       var r=await fetch('/apps',{headers:{'Authorization':'Bearer '+token}});
       var d=await r.json();
       appItems.innerHTML='';
-      d.apps.forEach(function(name){
+      d.apps.forEach(function(app){
         var el=document.createElement('div');
         el.className='app-item';
-        el.textContent=name;
+        var label=app.name;
+        if(app.windows&&app.windows.length>0){
+          var winText=app.windows.slice(0,2).join(', ');
+          if(app.windows.length>2) winText+=' +' +(app.windows.length-2);
+          label+=' — '+winText;
+        }
+        el.textContent=label;
         el.onclick=function(){
-          si({type:'activate-app',name:name});
+          si({type:'activate-app',name:app.name});
           appList.classList.remove('show');
         };
         appItems.appendChild(el);

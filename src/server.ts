@@ -128,18 +128,35 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
       return;
     }
     try {
+      // Get apps with their window titles
       const script = `tell application "System Events"
-  set n to name of every process whose background only is false
   set o to ""
-  repeat with i in n
-    set o to o & i & linefeed
+  set pList to every process whose background only is false
+  repeat with p in pList
+    set pName to name of p as text
+    set wNames to ""
+    try
+      set wList to name of every window of p
+      repeat with w in wList
+        set wNames to wNames & "||" & (w as text)
+      end repeat
+    end try
+    set o to o & pName & wNames & linefeed
   end repeat
   return o
 end tell`;
-      const names = execSync(`osascript -e '${script}'`, {
+      const lines = execSync(`osascript -e '${script}'`, {
         encoding: 'utf-8', timeout: 5000,
       }).trim().split('\n').filter(Boolean);
-      res.json({ apps: names });
+
+      const apps = lines.map((line: string) => {
+        const parts = line.split('||');
+        return {
+          name: parts[0],
+          windows: parts.slice(1).filter(Boolean),
+        };
+      });
+      res.json({ apps });
     } catch (e: any) {
       console.error('앱 목록 조회 실패:', e.message);
       res.json({ apps: [] });
