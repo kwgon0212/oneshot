@@ -6,670 +6,297 @@
 <title>Remote Desktop</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #1a1a2e; color: #eee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; height: 100dvh; height: 100vh; width: 100vw; touch-action: none; }
-  @supports (height: 100dvh) { body { height: 100dvh; } }
+  html, body { height: 100%; }
+  body { background: #111; color: #eee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; }
 
-  /* Login Screen */
-  #login-screen { display: flex; align-items: center; justify-content: center; height: 100dvh; height: 100vh; }
-  @supports (height: 100dvh) { #login-screen { height: 100dvh; } }
-  .login-box { background: #16213e; padding: 40px; border-radius: 12px; text-align: center; min-width: 320px; max-width: 90vw; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
-  .login-box h1 { font-size: 24px; margin-bottom: 8px; }
-  .login-box p { color: #888; margin-bottom: 24px; font-size: 14px; }
-  .login-box input { width: 100%; padding: 12px 16px; border: 2px solid #333; border-radius: 8px; background: #0f1629; color: #eee; font-size: 16px; outline: none; margin-bottom: 16px; }
+  /* Login */
+  #login { display: flex; align-items: center; justify-content: center; height: 100dvh; height: 100vh; background: #1a1a2e; }
+  @supports (height: 100dvh) { #login { height: 100dvh; } }
+  .login-box { background: #16213e; padding: 36px; border-radius: 12px; text-align: center; width: 320px; max-width: 90vw; }
+  .login-box h1 { font-size: 22px; margin-bottom: 6px; }
+  .login-box p { color: #888; margin-bottom: 20px; font-size: 13px; }
+  .login-box input { width: 100%; padding: 11px 14px; border: 2px solid #333; border-radius: 8px; background: #0f1629; color: #eee; font-size: 16px; outline: none; margin-bottom: 14px; }
   .login-box input:focus { border-color: #4a9eff; }
-  .login-box button { width: 100%; padding: 12px; border: none; border-radius: 8px; background: #4a9eff; color: #fff; font-size: 16px; cursor: pointer; font-weight: 600; }
-  .login-box button:hover { background: #3a8eef; }
-  .login-box button:disabled { background: #555; cursor: not-allowed; }
-  .login-error { color: #ff6b6b; margin-top: 12px; font-size: 14px; display: none; }
+  .login-box button { width: 100%; padding: 11px; border: none; border-radius: 8px; background: #4a9eff; color: #fff; font-size: 15px; cursor: pointer; font-weight: 600; }
+  .login-box button:disabled { background: #555; }
+  .login-err { color: #ff6b6b; margin-top: 10px; font-size: 13px; display: none; }
 
-  /* Stream Screen */
-  #stream-screen { display: none; width: 100vw; height: 100dvh; height: 100vh; position: relative; flex-direction: column; }
-  @supports (height: 100dvh) { #stream-screen { height: 100dvh; } }
-  #canvas-wrap { flex: 1; position: relative; overflow: hidden; background: #000; }
-  #canvas { width: 100%; height: 100%; object-fit: contain; cursor: default; display: block; }
+  /* Stream */
+  #stream { display: none; flex-direction: column; height: 100dvh; height: 100vh; }
+  @supports (height: 100dvh) { #stream { height: 100dvh; } }
+  #cvs-wrap { flex: 1; min-height: 0; background: #000; position: relative; }
+  #cvs { width: 100%; height: 100%; object-fit: contain; display: block; }
 
-  /* Top Bar */
-  #top-bar { position: fixed; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; align-items: center; z-index: 100; pointer-events: none; }
-  #top-bar > * { pointer-events: auto; }
-  #shutdown-btn { background: rgba(180,40,40,0.8); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 600; }
-  #shutdown-btn:hover { background: rgba(220,50,50,0.9); }
-  #status-bar { background: rgba(0,0,0,0.85); color: #ccc; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-family: monospace; line-height: 1.6; }
-  #toolbar-toggle { background: rgba(0,0,0,0.6); color: #ccc; border: 1px solid #555; border-radius: 6px; padding: 6px 10px; font-size: 16px; cursor: pointer; display: none; }
-  #toolbar-toggle.active { background: #4a9eff; color: #fff; border-color: #4a9eff; }
+  /* Floating controls - top left */
+  #ctrl-tl { position: fixed; top: 6px; left: 6px; z-index: 100; display: flex; gap: 6px; }
+  .pill { background: rgba(0,0,0,0.75); color: #ccc; border: none; border-radius: 20px; padding: 5px 12px; font-size: 12px; font-family: monospace; cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); white-space: nowrap; }
+  .pill:active, .pill.on { background: #4a9eff; color: #fff; }
+  .pill-red { background: rgba(180,40,40,0.8); color: #fff; }
 
-  /* Confirm Dialog */
-  #confirm-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 300; align-items: center; justify-content: center; }
-  .confirm-box { background: #16213e; padding: 32px; border-radius: 12px; text-align: center; min-width: 280px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-  .confirm-box p { margin-bottom: 20px; font-size: 16px; }
-  .confirm-btns { display: flex; gap: 12px; }
-  .confirm-btns button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  #confirm-yes { background: #c0392b; color: #fff; }
-  #confirm-yes:hover { background: #e74c3c; }
-  #confirm-no { background: #444; color: #ddd; }
-  #confirm-no:hover { background: #555; }
+  /* Info panel - shown on tap */
+  #info { display: none; position: fixed; top: 38px; left: 6px; background: rgba(0,0,0,0.85); color: #ccc; padding: 10px 14px; border-radius: 10px; font-size: 12px; font-family: monospace; line-height: 1.8; z-index: 100; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+  #info.show { display: block; }
+  #info input[type=range] { width: 90px; vertical-align: middle; }
 
-  /* Mobile Toolbar */
-  #mobile-toolbar { display: none; background: #222; border-top: 2px solid #4a9eff; padding: 8px; z-index: 50; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  #mobile-toolbar.visible { display: block; }
-  #mobile-toolbar .toolbar-row { display: flex; gap: 6px; align-items: center; min-width: max-content; }
-  #mobile-toolbar .toolbar-row + .toolbar-row { margin-top: 6px; }
-  .tb-btn { background: #3a3a5a; color: #fff; border: 1px solid #666; border-radius: 8px; padding: 10px 14px; font-size: 14px; font-family: -apple-system, sans-serif; cursor: pointer; white-space: nowrap; flex-shrink: 0; -webkit-tap-highlight-color: transparent; user-select: none; font-weight: 500; }
-  .tb-btn:active { background: #4a9eff; color: #fff; }
-  .tb-btn.active { background: #4a9eff; color: #fff; border-color: #4a9eff; }
-  .tb-sep { width: 1px; height: 32px; background: #555; flex-shrink: 0; }
-  #hidden-input { position: fixed; left: -9999px; top: -9999px; opacity: 0; width: 1px; height: 1px; }
+  /* Toolbar */
+  #toolbar { display: none; background: #1a1a1a; border-top: 2px solid #4a9eff; z-index: 50; flex-shrink: 0; }
+  #toolbar.show { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; align-items: center; }
+  .tb { background: #333; color: #fff; border: 1px solid #555; border-radius: 6px; padding: 9px 13px; font-size: 13px; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; user-select: none; }
+  .tb:active { background: #4a9eff; }
+  .tb.on { background: #4a9eff; border-color: #4a9eff; }
+  .tb-sm { padding: 9px 10px; font-size: 12px; }
 
-  /* Reconnect Overlay */
-  #reconnect-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; flex-direction: column; }
-  .spinner { width: 40px; height: 40px; border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  #reconnect-msg { font-size: 16px; color: #ccc; }
+  /* Hidden input */
+  #hinput { position: fixed; left: -9999px; top: -9999px; opacity: 0; }
+
+  /* Overlays */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; flex-direction: column; }
+  .overlay.show { display: flex; }
+  .spin { width: 36px; height: 36px; border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%; animation: sp .8s linear infinite; margin-bottom: 14px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .dialog { background: #16213e; padding: 28px; border-radius: 12px; text-align: center; min-width: 260px; }
+  .dialog p { margin-bottom: 16px; font-size: 15px; }
+  .dialog .sub { font-size: 12px; color: #888; margin-top: -10px; }
+  .dialog .btns { display: flex; gap: 10px; }
+  .dialog .btns button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-cancel { background: #444; color: #ddd; }
+  .btn-danger { background: #c0392b; color: #fff; }
 </style>
 </head>
 <body>
 
-<!-- Login -->
-<div id="login-screen">
+<div id="login">
   <div class="login-box">
     <h1>Remote Desktop</h1>
     <p>비밀번호를 입력하세요</p>
-    <input type="password" id="password-input" placeholder="비밀번호" autofocus>
-    <button id="connect-btn">연결</button>
-    <div class="login-error" id="login-error">비밀번호가 틀렸습니다</div>
+    <input type="password" id="pw" placeholder="비밀번호" autofocus>
+    <button id="go">연결</button>
+    <div class="login-err" id="err">비밀번호가 틀렸습니다</div>
   </div>
 </div>
 
-<!-- Stream -->
-<div id="stream-screen">
-  <div id="canvas-wrap">
-    <canvas id="canvas"></canvas>
+<div id="stream">
+  <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
+
+  <div id="ctrl-tl">
+    <button class="pill pill-red" id="btn-off">종료</button>
+    <button class="pill" id="btn-info">ℹ</button>
+    <button class="pill" id="btn-tb" style="display:none;">⌨</button>
   </div>
 
-  <!-- Top Bar -->
-  <div id="top-bar">
-    <button id="shutdown-btn">종료</button>
-    <button id="toolbar-toggle">🛠</button>
-    <div id="status-bar">
-      <div><span id="fps-display">0 FPS</span> | <span id="quality-display">Q:75</span></div>
-      <div>CPU <span id="cpu-display">-</span>% | MEM <span id="mem-display">-</span>%  <span id="mem-detail"></span></div>
-      <div style="margin-top:4px;">FPS <input type="range" id="fps-slider" min="1" max="30" value="15" style="width:80px;vertical-align:middle;"> <span id="fps-target">15</span></div>
-    </div>
+  <div id="info">
+    <div><span id="d-fps">0</span> FPS | Q:<span id="d-q">75</span></div>
+    <div>CPU <span id="d-cpu">-</span>% | MEM <span id="d-mem">-</span>% <span id="d-memg"></span></div>
+    <div>FPS <input type="range" id="fps-sl" min="1" max="30" value="15"> <span id="fps-v">15</span></div>
   </div>
 
-  <!-- Mobile Toolbar -->
-  <div id="mobile-toolbar">
-    <div class="toolbar-row">
-      <button class="tb-btn" id="tb-keyboard">⌨️ 키보드</button>
-      <div class="tb-sep"></div>
-      <button class="tb-btn" id="tb-desk-left">◀ 데스크톱</button>
-      <button class="tb-btn" id="tb-desk-right">데스크톱 ▶</button>
-      <div class="tb-sep"></div>
-      <button class="tb-btn" id="tb-right-click">우클릭</button>
-    </div>
-    <div class="toolbar-row">
-      <button class="tb-btn" data-key="Escape">ESC</button>
-      <button class="tb-btn" data-key="Tab">Tab</button>
-      <button class="tb-btn" data-key="Enter">Enter</button>
-      <button class="tb-btn" data-key="Backspace">⌫</button>
-      <button class="tb-btn" data-key="Space">Space</button>
-      <div class="tb-sep"></div>
-      <button class="tb-btn tb-mod" data-mod="ctrl">Ctrl</button>
-      <button class="tb-btn tb-mod" data-mod="alt">Alt</button>
-      <button class="tb-btn tb-mod" data-mod="meta">⌘</button>
-      <button class="tb-btn tb-mod" data-mod="shift">⇧</button>
-    </div>
+  <div id="toolbar">
+    <button class="tb" id="tb-kb">⌨ 키보드</button>
+    <button class="tb" id="tb-dl">◀</button>
+    <button class="tb" id="tb-dr">▶</button>
+    <button class="tb" id="tb-rc">우클릭</button>
+    <button class="tb" data-key="Escape">ESC</button>
+    <button class="tb tb-sm mod" data-mod="ctrl">Ctrl</button>
+    <button class="tb tb-sm mod" data-mod="alt">Alt</button>
+    <button class="tb tb-sm mod" data-mod="meta">⌘</button>
+    <button class="tb tb-sm mod" data-mod="shift">⇧</button>
   </div>
 </div>
 
-<!-- Hidden input for mobile keyboard -->
-<input type="text" id="hidden-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+<input type="text" id="hinput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
-<!-- Confirm Dialog -->
-<div id="confirm-overlay">
-  <div class="confirm-box">
-    <p>원격 데스크톱 서버를 종료할까요?</p>
-    <p style="font-size:12px;color:#888;margin-top:-12px;margin-bottom:16px;">서버가 종료되면 다시 접속할 수 없습니다.</p>
-    <div class="confirm-btns">
-      <button id="confirm-no">취소</button>
-      <button id="confirm-yes">종료</button>
+<div class="overlay" id="ov-confirm">
+  <div class="dialog">
+    <p>서버를 종료할까요?</p>
+    <p class="sub">종료 후 재접속 불가</p>
+    <div class="btns">
+      <button class="btn-cancel" id="cf-no">취소</button>
+      <button class="btn-danger" id="cf-yes">종료</button>
     </div>
   </div>
 </div>
 
-<!-- Reconnect Overlay -->
-<div id="reconnect-overlay">
-  <div class="spinner"></div>
-  <div id="reconnect-msg">재연결 중...</div>
+<div class="overlay" id="ov-recon">
+  <div class="spin"></div>
+  <div id="recon-msg" style="color:#ccc;font-size:15px;">재연결 중...</div>
 </div>
 
 <script>
-(function() {
-  'use strict';
+(function(){
+  var ws, token, sW=1920, sH=1080, reconN=0, fCount=0, fpsT=Date.now();
+  var rcMode=false, tbOpen=false, infoOpen=false;
+  var mods={ctrl:false,alt:false,meta:false,shift:false};
+  var hasTouch=navigator.maxTouchPoints>0;
 
-  // --- State ---
-  var ws = null;
-  var token = null;
-  var screenWidth = 1920;
-  var screenHeight = 1080;
-  var reconnectAttempts = 0;
-  var MAX_RECONNECT = 10;
-  var frameCount = 0;
-  var lastFpsTime = Date.now();
-  var showStatus = true;
-  var toolbarVisible = false;
-  var rightClickMode = false;
-  var stickyMods = { ctrl: false, alt: false, meta: false, shift: false };
+  // Elements
+  var login=document.getElementById('login'), stream=document.getElementById('stream');
+  var pwIn=document.getElementById('pw'), goBtn=document.getElementById('go'), errEl=document.getElementById('err');
+  var cvs=document.getElementById('cvs'), ctx=cvs.getContext('2d');
+  var hinput=document.getElementById('hinput');
+  var infoEl=document.getElementById('info');
+  var toolbar=document.getElementById('toolbar');
+  var btnTb=document.getElementById('btn-tb');
+  var ovConfirm=document.getElementById('ov-confirm'), ovRecon=document.getElementById('ov-recon');
+  var reconMsg=document.getElementById('recon-msg');
 
-  // Detect touch device: maxTouchPoints works on all modern browsers including foldables
-  var hasTouch = (navigator.maxTouchPoints > 0);
-
-  // --- Elements ---
-  var loginScreen = document.getElementById('login-screen');
-  var streamScreen = document.getElementById('stream-screen');
-  var passwordInput = document.getElementById('password-input');
-  var connectBtn = document.getElementById('connect-btn');
-  var loginError = document.getElementById('login-error');
-  var canvas = document.getElementById('canvas');
-  var ctx = canvas.getContext('2d');
-  var statusBar = document.getElementById('status-bar');
-  var fpsDisplay = document.getElementById('fps-display');
-  var qualityDisplay = document.getElementById('quality-display');
-  var reconnectOverlay = document.getElementById('reconnect-overlay');
-  var reconnectMsg = document.getElementById('reconnect-msg');
-  var hiddenInput = document.getElementById('hidden-input');
-  var toolbarToggle = document.getElementById('toolbar-toggle');
-  var mobileToolbar = document.getElementById('mobile-toolbar');
-
-  // Show toolbar toggle button if device has touch
-  if (hasTouch) {
-    toolbarToggle.style.display = 'block';
-    // Auto-show toolbar on touch devices
-    toolbarVisible = true;
-    mobileToolbar.classList.add('visible');
-    toolbarToggle.classList.add('active');
-  }
+  if(hasTouch){ btnTb.style.display=''; tbOpen=true; toolbar.classList.add('show'); btnTb.classList.add('on'); }
 
   // --- Auth ---
-  async function authenticate() {
-    var pw = passwordInput.value;
-    if (!pw) return;
-    connectBtn.disabled = true;
-    loginError.style.display = 'none';
-
-    try {
-      var res = await fetch('/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
-      });
-      var data = await res.json();
-      if (data.type === 'auth-ok') {
-        token = data.token;
-        loginScreen.style.display = 'none';
-        streamScreen.style.display = 'flex';
-        connectWebSocket();
-      } else {
-        loginError.style.display = 'block';
-        connectBtn.disabled = false;
-      }
-    } catch (err) {
-      loginError.textContent = '연결 실패. 다시 시도해주세요.';
-      loginError.style.display = 'block';
-      connectBtn.disabled = false;
-    }
+  async function auth(){
+    if(!pwIn.value)return; goBtn.disabled=true; errEl.style.display='none';
+    try{
+      var r=await fetch('/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwIn.value})});
+      var d=await r.json();
+      if(d.type==='auth-ok'){ token=d.token; login.style.display='none'; stream.style.display='flex'; startWs(); }
+      else{ errEl.style.display='block'; goBtn.disabled=false; }
+    }catch(e){ errEl.textContent='연결 실패'; errEl.style.display='block'; goBtn.disabled=false; }
   }
-
-  connectBtn.addEventListener('click', authenticate);
-  passwordInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') authenticate();
-  });
+  goBtn.onclick=auth;
+  pwIn.onkeydown=function(e){if(e.key==='Enter')auth();};
 
   // --- WebSocket ---
-  function getWsUrl() {
-    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return proto + '//' + location.host;
-  }
-
-  function connectWebSocket() {
-    ws = new WebSocket(getWsUrl());
-
-    ws.onopen = function() {
-      reconnectAttempts = 0;
-      reconnectOverlay.style.display = 'none';
-      ws.send(JSON.stringify({ type: 'auth', token: token }));
-    };
-
-    ws.onmessage = function(event) {
-      var msg;
-      try { msg = JSON.parse(event.data); } catch(e) { return; }
-
-      switch (msg.type) {
-        case 'auth-fail':
-          token = null;
-          loginScreen.style.display = 'flex';
-          streamScreen.style.display = 'none';
-          loginError.textContent = '세션 만료. 다시 로그인해주세요.';
-          loginError.style.display = 'block';
-          connectBtn.disabled = false;
-          break;
-
-        case 'screen-info':
-          screenWidth = msg.width;
-          screenHeight = msg.height;
-          canvas.width = msg.width;
-          canvas.height = msg.height;
-          break;
-
-        case 'frame':
-          renderFrame(msg.data);
-          break;
-
-        case 'quality-adjust':
-          qualityDisplay.textContent = 'Q:' + msg.quality;
-          break;
-
-        case 'system-stats':
-          document.getElementById('cpu-display').textContent = msg.cpuPercent;
-          document.getElementById('mem-display').textContent = msg.memPercent;
-          document.getElementById('mem-detail').textContent = '(' + msg.memUsedGB + '/' + msg.memTotalGB + 'GB)';
-          break;
+  function startWs(){
+    ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host);
+    ws.onopen=function(){ reconN=0; ovRecon.classList.remove('show'); ws.send(JSON.stringify({type:'auth',token:token})); };
+    ws.onmessage=function(ev){
+      var m; try{m=JSON.parse(ev.data);}catch(e){return;}
+      if(m.type==='auth-fail'){token=null;login.style.display='flex';stream.style.display='none';errEl.textContent='세션 만료';errEl.style.display='block';goBtn.disabled=false;}
+      else if(m.type==='screen-info'){sW=m.width;sH=m.height;cvs.width=m.width;cvs.height=m.height;}
+      else if(m.type==='frame'){renderFrame(m.data);}
+      else if(m.type==='quality-adjust'){document.getElementById('d-q').textContent=m.quality;}
+      else if(m.type==='system-stats'){
+        document.getElementById('d-cpu').textContent=m.cpuPercent;
+        document.getElementById('d-mem').textContent=m.memPercent;
+        document.getElementById('d-memg').textContent='('+m.memUsedGB+'/'+m.memTotalGB+'G)';
       }
     };
-
-    ws.onclose = function() {
-      if (!token) return;
-      attemptReconnect();
-    };
-
-    ws.onerror = function() {};
+    ws.onclose=function(){if(token)recon();};
+    ws.onerror=function(){};
+  }
+  function recon(){
+    if(reconN>=10){reconMsg.textContent='연결 실패. 새로고침 해주세요.';ovRecon.classList.add('show');return;}
+    reconN++; reconMsg.textContent='재연결 중... ('+reconN+'/10)'; ovRecon.classList.add('show');
+    setTimeout(startWs,3000);
   }
 
-  function attemptReconnect() {
-    if (reconnectAttempts >= MAX_RECONNECT) {
-      reconnectMsg.textContent = '연결 실패. 페이지를 새로고침 해주세요.';
-      reconnectOverlay.style.display = 'flex';
-      return;
-    }
-    reconnectAttempts++;
-    reconnectMsg.textContent = '재연결 중... (' + reconnectAttempts + '/' + MAX_RECONNECT + ')';
-    reconnectOverlay.style.display = 'flex';
-    setTimeout(connectWebSocket, 3000);
+  // --- Render ---
+  var img=new Image();
+  img.onload=function(){ctx.drawImage(img,0,0,cvs.width,cvs.height);fCount++;var n=Date.now();if(n-fpsT>=1000){document.getElementById('d-fps').textContent=fCount;fCount=0;fpsT=n;}};
+  function renderFrame(b64){img.src='data:image/jpeg;base64,'+b64;}
+
+  // --- Helpers ---
+  function ratio(e){
+    var r=cvs.getBoundingClientRect(), ca=cvs.width/cvs.height, ra=r.width/r.height;
+    var rw,rh,ox,oy;
+    if(ca>ra){rw=r.width;rh=r.width/ca;ox=0;oy=(r.height-rh)/2;}
+    else{rh=r.height;rw=r.height*ca;ox=(r.width-rw)/2;oy=0;}
+    return{x:Math.max(0,Math.min(1,(e.clientX-r.left-ox)/rw)),y:Math.max(0,Math.min(1,(e.clientY-r.top-oy)/rh))};
   }
+  function si(m){if(ws&&ws.readyState===1)ws.send(JSON.stringify(m));}
+  function getMods(){var a=[];if(mods.ctrl)a.push('ctrl');if(mods.alt)a.push('alt');if(mods.meta)a.push('meta');if(mods.shift)a.push('shift');return a;}
+  function clearMods(){mods.ctrl=mods.alt=mods.meta=mods.shift=false;document.querySelectorAll('.mod').forEach(function(b){b.classList.remove('on');});}
+  function sKey(k,ex){var m=getMods();if(ex)m=m.concat(ex);si({type:'key-down',key:k,modifiers:m});si({type:'key-up',key:k});clearMods();}
 
-  // --- Rendering ---
-  var img = new Image();
-  img.onload = function() {
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    frameCount++;
-    var now = Date.now();
-    if (now - lastFpsTime >= 1000) {
-      fpsDisplay.textContent = frameCount + ' FPS';
-      frameCount = 0;
-      lastFpsTime = now;
-    }
-  };
+  // --- Mouse ---
+  var lmt=0;
+  cvs.addEventListener('mousemove',function(e){var n=Date.now();if(n-lmt<30)return;lmt=n;var p=ratio(e);si({type:'mouse-move',x:p.x,y:p.y});});
+  cvs.addEventListener('mousedown',function(e){e.preventDefault();var p=ratio(e);si({type:'mouse-down',x:p.x,y:p.y,button:e.button===2?'right':e.button===1?'middle':'left'});});
+  cvs.addEventListener('mouseup',function(e){e.preventDefault();var p=ratio(e);si({type:'mouse-up',x:p.x,y:p.y,button:e.button===2?'right':e.button===1?'middle':'left'});});
+  cvs.addEventListener('wheel',function(e){e.preventDefault();var p=ratio(e);si({type:'mouse-scroll',x:p.x,y:p.y,deltaY:Math.sign(e.deltaY)*Math.min(Math.abs(e.deltaY),10)});},{passive:false});
+  cvs.addEventListener('contextmenu',function(e){e.preventDefault();});
 
-  function renderFrame(base64Data) {
-    img.src = 'data:image/jpeg;base64,' + base64Data;
-  }
-
-  // --- Input Helpers ---
-  // Calculate ratio within the actual rendered image area (excluding black bars from object-fit:contain)
-  function getCanvasRatio(e) {
-    var rect = canvas.getBoundingClientRect();
-    var canvasAspect = canvas.width / canvas.height;
-    var rectAspect = rect.width / rect.height;
-    var renderW, renderH, offX, offY;
-
-    if (canvasAspect > rectAspect) {
-      // wider than container — black bars top/bottom
-      renderW = rect.width;
-      renderH = rect.width / canvasAspect;
-      offX = 0;
-      offY = (rect.height - renderH) / 2;
-    } else {
-      // taller than container — black bars left/right
-      renderH = rect.height;
-      renderW = rect.height * canvasAspect;
-      offX = (rect.width - renderW) / 2;
-      offY = 0;
-    }
-
-    return {
-      x: Math.max(0, Math.min(1, (e.clientX - rect.left - offX) / renderW)),
-      y: Math.max(0, Math.min(1, (e.clientY - rect.top - offY) / renderH)),
-    };
-  }
-
-  function getButton(e) {
-    if (e.button === 2) return 'right';
-    if (e.button === 1) return 'middle';
-    return 'left';
-  }
-
-  function sendInput(msg) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(msg));
-    }
-  }
-
-  function getStickyMods() {
-    var mods = [];
-    if (stickyMods.ctrl) mods.push('ctrl');
-    if (stickyMods.alt) mods.push('alt');
-    if (stickyMods.meta) mods.push('meta');
-    if (stickyMods.shift) mods.push('shift');
-    return mods;
-  }
-
-  function clearStickyMods() {
-    stickyMods.ctrl = false;
-    stickyMods.alt = false;
-    stickyMods.meta = false;
-    stickyMods.shift = false;
-    document.querySelectorAll('.tb-mod').forEach(function(b) { b.classList.remove('active'); });
-  }
-
-  function sendKey(key, extraMods) {
-    var mods = getStickyMods();
-    if (extraMods) mods = mods.concat(extraMods);
-    sendInput({ type: 'key-down', key: key, modifiers: mods });
-    sendInput({ type: 'key-up', key: key });
-    clearStickyMods();
-  }
-
-  // --- Toolbar Toggle ---
-  function toggleToolbar(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
-    toolbarVisible = !toolbarVisible;
-    mobileToolbar.classList.toggle('visible', toolbarVisible);
-    toolbarToggle.classList.toggle('active', toolbarVisible);
-  }
-  toolbarToggle.addEventListener('click', toggleToolbar);
-  toolbarToggle.addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleToolbar();
+  // --- Keyboard ---
+  document.addEventListener('keydown',function(e){
+    if(stream.style.display==='none'||e.target===hinput)return;
+    if(['F5','F11','F12'].indexOf(e.key)>=0||(e.ctrlKey&&'rwtnl'.indexOf(e.key.toLowerCase())>=0))e.preventDefault();
+    si({type:'key-down',key:e.key,modifiers:[e.ctrlKey&&'ctrl',e.shiftKey&&'shift',e.altKey&&'alt',e.metaKey&&'meta'].filter(Boolean)});
   });
+  document.addEventListener('keyup',function(e){if(stream.style.display==='none'||e.target===hinput)return;si({type:'key-up',key:e.key});});
 
-  // --- Input: Mouse (Desktop) ---
-  var lastMoveTime = 0;
-  canvas.addEventListener('mousemove', function(e) {
-    var now = Date.now();
-    if (now - lastMoveTime < 30) return;
-    lastMoveTime = now;
-    var r = getCanvasRatio(e);
-    sendInput({ type: 'mouse-move', x: r.x, y: r.y });
-  });
-
-  canvas.addEventListener('mousedown', function(e) {
+  // --- Touch ---
+  var tsp=null,tmoved=false,ltmt=0;
+  cvs.addEventListener('touchstart',function(e){
     e.preventDefault();
-    var r = getCanvasRatio(e);
-    sendInput({ type: 'mouse-down', x: r.x, y: r.y, button: getButton(e) });
-  });
-
-  canvas.addEventListener('mouseup', function(e) {
-    e.preventDefault();
-    var r = getCanvasRatio(e);
-    sendInput({ type: 'mouse-up', x: r.x, y: r.y, button: getButton(e) });
-  });
-
-  // No separate 'click' handler — mousedown+mouseup already handle it.
-  // mouse-click is only sent from touch taps and toolbar buttons.
-
-  canvas.addEventListener('wheel', function(e) {
-    e.preventDefault();
-    var r = getCanvasRatio(e);
-    var deltaY = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 10);
-    sendInput({ type: 'mouse-scroll', x: r.x, y: r.y, deltaY: deltaY });
-  }, { passive: false });
-
-  canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
-
-  // --- Input: Keyboard (Desktop) ---
-  function getModifiers(e) {
-    var mods = [];
-    if (e.ctrlKey) mods.push('ctrl');
-    if (e.shiftKey) mods.push('shift');
-    if (e.altKey) mods.push('alt');
-    if (e.metaKey) mods.push('meta');
-    return mods;
-  }
-
-  document.addEventListener('keydown', function(e) {
-    if (streamScreen.style.display === 'none') return;
-    // Status toggle
-    if (e.key === 'i' && !e.ctrlKey && !e.altKey && !e.metaKey && e.target === document.body) {
-      showStatus = !showStatus;
-      statusBar.style.display = showStatus ? 'block' : 'none';
-      return;
+    // Blur hidden input to prevent keyboard from popping up
+    hinput.blur();
+    if(e.touches.length===1){
+      var t=e.touches[0],p=ratio(t);
+      tsp={x:p.x,y:p.y,px:t.clientX,py:t.clientY};tmoved=false;
+      si({type:'mouse-move',x:p.x,y:p.y});
     }
-    // Prevent browser shortcuts
-    if (['F5', 'F11', 'F12'].includes(e.key) || (e.ctrlKey && ['r', 'w', 't', 'n', 'l'].includes(e.key.toLowerCase()))) {
-      e.preventDefault();
-    }
-    // Don't send if typing in hidden input on mobile (handled separately)
-    if (e.target === hiddenInput) return;
-    sendInput({ type: 'key-down', key: e.key, modifiers: getModifiers(e) });
-  });
+  },{passive:false});
 
-  document.addEventListener('keyup', function(e) {
-    if (streamScreen.style.display === 'none') return;
-    if (e.target === hiddenInput) return;
-    sendInput({ type: 'key-up', key: e.key });
-  });
-
-  // --- Input: Touch ---
-  var touchStartPos = null;
-  var touchMoved = false;
-  var lastTouchMoveTime = 0;
-  var TOUCH_TAP_THRESHOLD = 10;
-
-  canvas.addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    if (e.touches.length === 1) {
-      var touch = e.touches[0];
-      var r = getCanvasRatio(touch);
-      touchStartPos = { x: r.x, y: r.y, px: touch.clientX, py: touch.clientY };
-      touchMoved = false;
-      sendInput({ type: 'mouse-move', x: r.x, y: r.y });
-    }
-  }, { passive: false });
-
-  canvas.addEventListener('touchmove', function(e) {
-    e.preventDefault();
-    var now = Date.now();
-    if (now - lastTouchMoveTime < 30) return;
-    lastTouchMoveTime = now;
-
-    if (e.touches.length === 1 && touchStartPos) {
-      var touch = e.touches[0];
-      var dx = Math.abs(touch.clientX - touchStartPos.px);
-      var dy = Math.abs(touch.clientY - touchStartPos.py);
-      if (dx > TOUCH_TAP_THRESHOLD || dy > TOUCH_TAP_THRESHOLD) {
-        if (!touchMoved) {
-          touchMoved = true;
-          sendInput({ type: 'mouse-down', x: touchStartPos.x, y: touchStartPos.y, button: 'left' });
-        }
-        var r = getCanvasRatio(touch);
-        sendInput({ type: 'mouse-move', x: r.x, y: r.y });
+  cvs.addEventListener('touchmove',function(e){
+    e.preventDefault();var n=Date.now();if(n-ltmt<30)return;ltmt=n;
+    if(e.touches.length===1&&tsp){
+      var t=e.touches[0];
+      if(Math.abs(t.clientX-tsp.px)>10||Math.abs(t.clientY-tsp.py)>10){
+        if(!tmoved){tmoved=true;si({type:'mouse-down',x:tsp.x,y:tsp.y,button:'left'});}
+        var p=ratio(t);si({type:'mouse-move',x:p.x,y:p.y});
       }
-    } else if (e.touches.length === 2) {
-      var t1 = e.touches[0];
-      var t2 = e.touches[1];
-      var dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-      if (!canvas._lastPinchDist) {
-        canvas._lastPinchDist = dist;
-        return;
-      }
-      var delta = canvas._lastPinchDist - dist;
-      canvas._lastPinchDist = dist;
-      if (Math.abs(delta) > 2) {
-        var midR = getCanvasRatio({
-          clientX: (t1.clientX + t2.clientX) / 2,
-          clientY: (t1.clientY + t2.clientY) / 2,
-        });
-        sendInput({ type: 'mouse-scroll', x: midR.x, y: midR.y, deltaY: delta > 0 ? 3 : -3 });
-      }
+    }else if(e.touches.length===2){
+      var a=e.touches[0],b=e.touches[1],d=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+      if(!cvs._pd){cvs._pd=d;return;}var dl=cvs._pd-d;cvs._pd=d;
+      if(Math.abs(dl)>2){var mid=ratio({clientX:(a.clientX+b.clientX)/2,clientY:(a.clientY+b.clientY)/2});si({type:'mouse-scroll',x:mid.x,y:mid.y,deltaY:dl>0?3:-3});}
     }
-  }, { passive: false });
+  },{passive:false});
 
-  canvas.addEventListener('touchend', function(e) {
-    e.preventDefault();
-    canvas._lastPinchDist = null;
-
-    if (touchStartPos) {
-      if (touchMoved) {
-        var r = touchStartPos;
-        if (e.changedTouches.length > 0) {
-          r = getCanvasRatio(e.changedTouches[0]);
-        }
-        sendInput({ type: 'mouse-up', x: r.x, y: r.y, button: 'left' });
-      } else {
-        var btn = rightClickMode ? 'right' : 'left';
-        sendInput({ type: 'mouse-click', x: touchStartPos.x, y: touchStartPos.y, button: btn });
-        if (rightClickMode) {
-          rightClickMode = false;
-          document.getElementById('tb-right-click').classList.remove('active');
-        }
-      }
-      touchStartPos = null;
-      touchMoved = false;
+  cvs.addEventListener('touchend',function(e){
+    e.preventDefault();cvs._pd=null;
+    if(tsp){
+      if(tmoved){var p=e.changedTouches.length?ratio(e.changedTouches[0]):tsp;si({type:'mouse-up',x:p.x,y:p.y,button:'left'});}
+      else{si({type:'mouse-click',x:tsp.x,y:tsp.y,button:rcMode?'right':'left'});if(rcMode){rcMode=false;document.getElementById('tb-rc').classList.remove('on');}}
+      tsp=null;tmoved=false;
     }
-  }, { passive: false });
+  },{passive:false});
 
   // Long press = right click
-  var longPressTimer = null;
-  canvas.addEventListener('touchstart', function(e) {
-    if (e.touches.length === 1) {
-      longPressTimer = setTimeout(function() {
-        if (touchStartPos && !touchMoved) {
-          sendInput({ type: 'mouse-click', x: touchStartPos.x, y: touchStartPos.y, button: 'right' });
-          touchStartPos = null;
-        }
-      }, 600);
-    }
-  }, { passive: true });
+  var lpt;
+  cvs.addEventListener('touchstart',function(e){if(e.touches.length===1)lpt=setTimeout(function(){if(tsp&&!tmoved){si({type:'mouse-click',x:tsp.x,y:tsp.y,button:'right'});tsp=null;}},600);},{passive:true});
+  cvs.addEventListener('touchmove',function(){clearTimeout(lpt);},{passive:true});
+  cvs.addEventListener('touchend',function(){clearTimeout(lpt);},{passive:true});
 
-  canvas.addEventListener('touchmove', function() {
-    clearTimeout(longPressTimer);
-  }, { passive: true });
+  // --- Top controls ---
+  document.getElementById('btn-info').onclick=function(e){e.stopPropagation();infoOpen=!infoOpen;infoEl.classList.toggle('show',infoOpen);this.classList.toggle('on',infoOpen);};
+  btnTb.onclick=function(e){e.stopPropagation();tbOpen=!tbOpen;toolbar.classList.toggle('show',tbOpen);this.classList.toggle('on',tbOpen);};
 
-  canvas.addEventListener('touchend', function() {
-    clearTimeout(longPressTimer);
-  }, { passive: true });
+  // --- Toolbar buttons ---
+  function tbClick(id,fn){var el=document.getElementById(id);el.onclick=function(e){e.preventDefault();e.stopPropagation();fn();};el.ontouchstart=function(e){e.preventDefault();e.stopPropagation();fn();};}
 
-  // --- Mobile Toolbar Buttons ---
+  tbClick('tb-kb',function(){hinput.value='';hinput.focus();});
+  tbClick('tb-dl',function(){si({type:'key-down',key:'ArrowLeft',modifiers:['ctrl']});si({type:'key-up',key:'ArrowLeft'});});
+  tbClick('tb-dr',function(){si({type:'key-down',key:'ArrowRight',modifiers:['ctrl']});si({type:'key-up',key:'ArrowRight'});});
+  tbClick('tb-rc',function(){rcMode=!rcMode;document.getElementById('tb-rc').classList.toggle('on',rcMode);});
 
-  // Keyboard button
-  document.getElementById('tb-keyboard').addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    hiddenInput.focus();
+  document.querySelectorAll('.tb[data-key]').forEach(function(b){
+    var k=b.getAttribute('data-key');
+    b.onclick=b.ontouchstart=function(e){e.preventDefault();e.stopPropagation();sKey(k);};
   });
-  document.getElementById('tb-keyboard').addEventListener('touchstart', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    hiddenInput.focus();
+  document.querySelectorAll('.mod').forEach(function(b){
+    var m=b.getAttribute('data-mod');
+    b.onclick=b.ontouchstart=function(e){e.preventDefault();e.stopPropagation();mods[m]=!mods[m];b.classList.toggle('on',mods[m]);};
   });
 
-  // Hidden input captures mobile keyboard input
-  hiddenInput.addEventListener('input', function() {
-    var val = hiddenInput.value;
-    if (val.length > 0) {
-      for (var i = 0; i < val.length; i++) {
-        sendKey(val[i]);
-      }
-      hiddenInput.value = '';
-    }
+  // Hidden input
+  hinput.addEventListener('input',function(){
+    var v=hinput.value;if(v.length>0){for(var i=0;i<v.length;i++)sKey(v[i]);hinput.value='';}
+  });
+  hinput.addEventListener('keydown',function(e){
+    if(['Backspace','Enter','Tab','Escape'].indexOf(e.key)>=0){e.preventDefault();sKey(e.key);}
   });
 
-  hiddenInput.addEventListener('keydown', function(e) {
-    if (['Backspace', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
-      e.preventDefault();
-      sendKey(e.key);
-    }
-  });
+  // FPS
+  var fpsSl=document.getElementById('fps-sl'),fpsV=document.getElementById('fps-v');
+  fpsSl.addEventListener('input',function(){fpsV.textContent=fpsSl.value;si({type:'set-fps',fps:parseInt(fpsSl.value,10)});});
 
-  // Desktop switch buttons (Ctrl+Left / Ctrl+Right on macOS)
-  function addBtnHandler(id, handler) {
-    var el = document.getElementById(id);
-    el.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); handler(); });
-    el.addEventListener('touchstart', function(e) { e.preventDefault(); e.stopPropagation(); handler(); });
-  }
-
-  addBtnHandler('tb-desk-left', function() {
-    sendInput({ type: 'key-down', key: 'ArrowLeft', modifiers: ['ctrl'] });
-    sendInput({ type: 'key-up', key: 'ArrowLeft' });
-  });
-
-  addBtnHandler('tb-desk-right', function() {
-    sendInput({ type: 'key-down', key: 'ArrowRight', modifiers: ['ctrl'] });
-    sendInput({ type: 'key-up', key: 'ArrowRight' });
-  });
-
-  // Right-click toggle
-  addBtnHandler('tb-right-click', function() {
-    rightClickMode = !rightClickMode;
-    document.getElementById('tb-right-click').classList.toggle('active', rightClickMode);
-  });
-
-  // Special key buttons
-  document.querySelectorAll('.tb-btn[data-key]').forEach(function(btn) {
-    function handler(e) { e.preventDefault(); e.stopPropagation(); sendKey(btn.getAttribute('data-key')); }
-    btn.addEventListener('click', handler);
-    btn.addEventListener('touchstart', handler);
-  });
-
-  // Sticky modifier buttons
-  document.querySelectorAll('.tb-mod').forEach(function(btn) {
-    function handler(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      var mod = btn.getAttribute('data-mod');
-      stickyMods[mod] = !stickyMods[mod];
-      btn.classList.toggle('active', stickyMods[mod]);
-    }
-    btn.addEventListener('click', handler);
-    btn.addEventListener('touchstart', handler);
-  });
-
-  // --- FPS Slider ---
-  var fpsSlider = document.getElementById('fps-slider');
-  var fpsTarget = document.getElementById('fps-target');
-  fpsSlider.addEventListener('input', function() {
-    fpsTarget.textContent = fpsSlider.value;
-    sendInput({ type: 'set-fps', fps: parseInt(fpsSlider.value, 10) });
-  });
-
-  // --- Shutdown ---
-  var confirmOverlay = document.getElementById('confirm-overlay');
-  var shutdownBtn = document.getElementById('shutdown-btn');
-
-  function showConfirm(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
-    confirmOverlay.style.display = 'flex';
-  }
-  shutdownBtn.addEventListener('click', showConfirm);
-  shutdownBtn.addEventListener('touchstart', showConfirm);
-
-  document.getElementById('confirm-no').addEventListener('click', function() {
-    confirmOverlay.style.display = 'none';
-  });
-
-  document.getElementById('confirm-yes').addEventListener('click', async function() {
-    try {
-      await fetch('/shutdown', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token },
-      });
-    } catch (e) { /* server is shutting down */ }
-    confirmOverlay.style.display = 'none';
-    token = null;
-    if (ws) ws.close();
-    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#aaa;font-size:18px;">서버가 종료되었습니다.</div>';
-  });
-
+  // Shutdown
+  document.getElementById('btn-off').onclick=document.getElementById('btn-off').ontouchstart=function(e){e.preventDefault();e.stopPropagation();ovConfirm.classList.add('show');};
+  document.getElementById('cf-no').onclick=function(){ovConfirm.classList.remove('show');};
+  document.getElementById('cf-yes').onclick=async function(){
+    try{await fetch('/shutdown',{method:'POST',headers:{'Authorization':'Bearer '+token}});}catch(e){}
+    ovConfirm.classList.remove('show');token=null;if(ws)ws.close();
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#888;font-size:16px;">서버가 종료되었습니다.</div>';
+  };
 })();
 </script>
 </body>
