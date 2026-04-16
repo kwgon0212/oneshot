@@ -55,8 +55,9 @@
   #toolbar { display: none; background: #1a1a1a; border-top: 2px solid #4a9eff; z-index: 50; flex-shrink: 0; }
   #toolbar.show { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; align-items: center; }
   .tb { background: #333; color: #fff; border: 1px solid #555; border-radius: 6px; padding: 9px 13px; font-size: 13px; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; user-select: none; }
-  .tb:active { background: #4a9eff; }
+  .tb:active, .tb.pressed { background: #4a9eff; transform: scale(0.95); }
   .tb.on { background: #4a9eff; border-color: #4a9eff; }
+  .tb { transition: transform 0.1s, background 0.1s; }
   .tb-sm { padding: 9px 10px; font-size: 12px; }
 
   /* Hidden input */
@@ -389,7 +390,11 @@
   btnTb.onclick=function(e){e.stopPropagation();tbOpen=!tbOpen;toolbar.classList.toggle('show',tbOpen);this.classList.toggle('on',tbOpen);};
 
   // --- Toolbar buttons ---
-  function tbClick(id,fn){var el=document.getElementById(id);el.onclick=function(e){e.preventDefault();e.stopPropagation();fn();};el.ontouchstart=function(e){e.preventDefault();e.stopPropagation();fn();};}
+  function tbClick(id,fn){
+    var el=document.getElementById(id);
+    function run(e){e.preventDefault();e.stopPropagation();el.classList.add('pressed');setTimeout(function(){el.classList.remove('pressed');},150);fn();}
+    el.onclick=run;el.ontouchstart=run;
+  }
 
   tbClick('tb-kb',function(){hinput.value='';hinput.focus();});
   tbClick('tb-rc',function(){rcMode=!rcMode;document.getElementById('tb-rc').classList.toggle('on',rcMode);});
@@ -487,7 +492,8 @@
 
   document.querySelectorAll('.tb[data-key]').forEach(function(b){
     var k=b.getAttribute('data-key');
-    b.onclick=b.ontouchstart=function(e){e.preventDefault();e.stopPropagation();sKey(k);};
+    function run(e){e.preventDefault();e.stopPropagation();b.classList.add('pressed');setTimeout(function(){b.classList.remove('pressed');},150);sKey(k);}
+    b.onclick=run;b.ontouchstart=run;
   });
   document.querySelectorAll('.mod').forEach(function(b){
     var m=b.getAttribute('data-mod');
@@ -495,7 +501,27 @@
   });
 
   // Hidden input
+  // Korean composition handling
+  var composing=false;
+  hinput.addEventListener('compositionstart',function(){composing=true;});
+  hinput.addEventListener('compositionend',function(e){
+    composing=false;
+    var v=e.data||hinput.value;
+    if(v.length>0){
+      si({type:'type-text',text:v});
+      showToast(v);
+    }
+    hinput.value='';
+  });
   hinput.addEventListener('input',function(){
+    if(composing){
+      // Show composing text in toast (preview) but don't send yet
+      if(hinput.value) showToast(hinput.value);
+      // Remove last char from buffer since showToast appends — replace instead
+      toastBuf=toastBuf.slice(0,-(hinput.value.length-1)||undefined);
+      inputToast.textContent=toastBuf;
+      return;
+    }
     var v=hinput.value;
     if(v.length>0){
       si({type:'type-text',text:v});
@@ -504,6 +530,7 @@
     }
   });
   hinput.addEventListener('keydown',function(e){
+    if(composing)return;
     if(e.key==='Backspace'){e.preventDefault();sKey('Backspace');if(toastBuf.length>0){toastBuf=toastBuf.slice(0,-1);inputToast.textContent=toastBuf;}clearTimeout(toastTimer);toastTimer=setTimeout(function(){inputToast.classList.remove('show');toastBuf='';},1500);}
     else if(e.key==='Enter'){e.preventDefault();sKey('Enter');inputToast.classList.remove('show');toastBuf='';}
     else if(e.key==='Tab'){e.preventDefault();sKey('Tab');}
