@@ -5,10 +5,17 @@ import { homedir, platform } from 'os';
 
 let screenWidth = 1920;
 let screenHeight = 1080;
+let screenOffsetX = 0;
+let screenOffsetY = 0;
 
 export function setScreenSize(width: number, height: number): void {
   screenWidth = width;
   screenHeight = height;
+}
+
+export function setScreenOffset(x: number, y: number): void {
+  screenOffsetX = x;
+  screenOffsetY = y;
 }
 
 export function isValidRatio(x: number, y: number): boolean {
@@ -24,8 +31,8 @@ export function ratioToAbsolute(
   width: number, height: number
 ): { x: number; y: number } {
   return {
-    x: Math.round(xRatio * width),
-    y: Math.round(yRatio * height),
+    x: Math.round(xRatio * width) + screenOffsetX,
+    y: Math.round(yRatio * height) + screenOffsetY,
   };
 }
 
@@ -47,6 +54,19 @@ extern CFArrayRef CGSCopyManagedDisplaySpaces(CGSConnectionID cid);
 
 int main(int argc, char *argv[]) {
     if (argc < 2) return 1;
+
+    if (strcmp(argv[1], "display-bounds") == 0 && argc >= 3) {
+        int target = atoi(argv[2]);
+        uint32_t totalCount = 0;
+        CGGetActiveDisplayList(0, NULL, &totalCount);
+        if ((uint32_t)target >= totalCount) { printf("0 0 1920 1080\\n"); return 0; }
+        CGDirectDisplayID *allDisplays = (CGDirectDisplayID *)malloc(totalCount * sizeof(CGDirectDisplayID));
+        CGGetActiveDisplayList(totalCount, allDisplays, &totalCount);
+        CGRect bounds = CGDisplayBounds(allDisplays[target]);
+        printf("%d %d %d %d\\n", (int)bounds.origin.x, (int)bounds.origin.y, (int)bounds.size.width, (int)bounds.size.height);
+        free(allDisplays);
+        return 0;
+    }
 
     if (strcmp(argv[1], "display-for-point") == 0 && argc >= 4) {
         double x = atof(argv[2]), y = atof(argv[3]);
@@ -214,6 +234,16 @@ function macHelper(args: string[]): void {
   }
 }
 
+
+export function getDisplayBounds(index: number): { x: number; y: number; w: number; h: number } | null {
+  if (!helperReady) return null;
+  try {
+    const out = execFileSync(HELPER_PATH, ['display-bounds', String(index)], { encoding: 'utf-8', timeout: 2000 }).trim();
+    const parts = out.split(' ').map(Number);
+    if (parts.length >= 4) return { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
+  } catch { /* ignore */ }
+  return null;
+}
 
 export function getDisplayForPoint(x: number, y: number): number {
   if (!helperReady) return -1;

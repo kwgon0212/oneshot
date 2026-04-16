@@ -6,8 +6,8 @@ import path from 'path';
 import { verifyPassword, createSessionToken, isValidToken } from './auth';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
-  handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize,
-  ensureMacHelper, getMainDisplayPoints, getDisplayForPoint,
+  handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize, setScreenOffset,
+  ensureMacHelper, getMainDisplayPoints, getDisplayForPoint, getDisplayBounds,
 } from './input-handler';
 import { execSync } from 'child_process';
 import { startCapture, getScreenSize, listDisplays, CaptureOptions, CaptureSession } from './capture';
@@ -207,10 +207,18 @@ end tell`;
     if (statsInterval) { clearInterval(statsInterval); statsInterval = null; }
   }
 
-  // Switch capture to a display by index
+  // Switch capture to a display by index and update coordinate mapping
   function switchDisplay(displayIdx: number) {
     if (captureSession) {
       captureSession.setDisplay(String(displayIdx));
+      // Update mouse coordinate mapping to target display
+      if (process.platform === 'darwin') {
+        const bounds = getDisplayBounds(displayIdx);
+        if (bounds) {
+          setScreenSize(bounds.w, bounds.h);
+          setScreenOffset(bounds.x, bounds.y);
+        }
+      }
       activeClient?.send(JSON.stringify({ type: 'display-changed', id: displayIdx }));
     }
   }
