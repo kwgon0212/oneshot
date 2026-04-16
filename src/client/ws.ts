@@ -9,6 +9,18 @@ class WsManager {
   private onDisconnect: () => void = () => {};
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
+  constructor() {
+    // 탭 복귀 시 자동 재연결
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.token) {
+        if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
+          console.log('[ws] 탭 복귀 — 재연결');
+          this.connect(this.token);
+        }
+      }
+    });
+  }
+
   setHandlers(opts: { onMessage: MessageHandler; onFrame: FrameHandler; onDisconnect: () => void }) {
     this.onMessage = opts.onMessage;
     this.onFrame = opts.onFrame;
@@ -17,6 +29,10 @@ class WsManager {
 
   connect(token: string) {
     this.token = token;
+    // 기존 연결 정리
+    if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
+    if (this.ws) { try { this.ws.close(); } catch {} }
+
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     this.ws = new WebSocket(proto + '//' + location.host);
     this.ws.binaryType = 'blob';
@@ -34,7 +50,7 @@ class WsManager {
     };
 
     this.ws.onclose = () => {
-      if (this.pingInterval) clearInterval(this.pingInterval);
+      if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
       if (this.token) this.onDisconnect();
     };
     this.ws.onerror = () => {};
@@ -46,6 +62,7 @@ class WsManager {
 
   close() {
     this.token = null;
+    if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
     this.ws?.close();
   }
 

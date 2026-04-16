@@ -9,15 +9,14 @@ export type Config = {
   fps: number;
   quality: number;
   scale: number;
-  headless: boolean;
 };
 
 type Props = {
   onStart: (config: Config) => void;
 };
 
-type Field = 'username' | 'password' | 'port' | 'fps' | 'quality' | 'scale' | 'headless' | 'start';
-const FIELDS: Field[] = ['username', 'password', 'port', 'fps', 'quality', 'scale', 'headless', 'start'];
+type Field = 'username' | 'password' | 'port' | 'fps' | 'quality' | 'scale' | 'start';
+const FIELDS: Field[] = ['username', 'password', 'port', 'fps', 'quality', 'scale', 'start'];
 
 const DEFAULTS = {
   port: 3000,
@@ -40,7 +39,6 @@ export function App({ onStart }: Props) {
   const [fps, setFps] = useState(DEFAULTS.fps);
   const [quality, setQuality] = useState(DEFAULTS.quality);
   const [scale, setScale] = useState(DEFAULTS.scale);
-  const [headless, setHeadless] = useState(false);
   const [focused, setFocused] = useState<Field>('username');
   const [usernameDone, setUsernameDone] = useState(false);
   const [passwordDone, setPasswordDone] = useState(false);
@@ -70,12 +68,8 @@ export function App({ onStart }: Props) {
     if (key.leftArrow)  adjust(focused, -1);
     if (key.rightArrow) adjust(focused, 1);
 
-    if (key.return && focused === 'headless') {
-      setHeadless(v => !v);
-      return;
-    }
     if (key.return && focused === 'start') {
-      onStart({ username, password, port, fps, quality, scale, headless });
+      onStart({ username, password, port, fps, quality, scale });
     }
   });
 
@@ -166,15 +160,6 @@ export function App({ onStart }: Props) {
         </Text>
         <Text>{scale.toFixed(1)}</Text>
         {highlight('scale') && <Text dimColor>  ← →</Text>}
-      </Box>
-
-      {/* Headless */}
-      <Box marginTop={1}>
-        <Text color={highlight('headless') ? 'cyan' : undefined}>
-          {cursor('headless')}{'헤드리스: '}
-        </Text>
-        <Text color={headless ? 'green' : 'red'}>{headless ? '켜짐' : '꺼짐'}</Text>
-        {highlight('headless') && <Text dimColor>  Enter (밝기0 + sleep방지)</Text>}
       </Box>
 
       <Box marginTop={1}>

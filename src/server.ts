@@ -10,8 +10,9 @@ import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize, setScreenOffset,
   ensureMacHelper, getMainDisplayPoints, getDisplayForPoint, getDisplayBounds,
+  dimDisplay, restoreDisplay,
 } from './input-handler.js';
-import { execSync } from 'child_process';
+import { execSync, spawn, type ChildProcess } from 'child_process';
 import { startCapture, getScreenSize, listDisplays, CaptureOptions, CaptureSession } from './capture.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -140,6 +141,59 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
         loginAttempts.set(ip, { count: newCount, lockedUntil: 0 });
         res.status(401).json({ type: 'auth-fail', attemptsLeft: MAX_LOGIN_ATTEMPTS - newCount });
       }
+    }
+  });
+
+  // Brightness endpoint (macOS)
+  let isDimmed = false;
+  app.post('/brightness', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token || !isTokenValid(token)) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    if (process.platform !== 'darwin') {
+      res.status(400).json({ error: 'macOS only' });
+      return;
+    }
+    const { action } = req.body; // 'dim' | 'restore' | 'toggle'
+    if (action === 'dim' || (action === 'toggle' && !isDimmed)) {
+      dimDisplay();
+      isDimmed = true;
+      console.log('🌑 웹에서 디스플레이 끔');
+    } else {
+      restoreDisplay();
+      isDimmed = false;
+      console.log('💡 웹에서 디스플레이 켬');
+    }
+    res.json({ dimmed: isDimmed });
+  });
+
+  // Caffeinate endpoint (macOS) — prevent system/display sleep
+  let caffeinateProc: ChildProcess | null = null;
+  app.post('/caffeinate', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token || !isTokenValid(token)) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    if (process.platform !== 'darwin') {
+      res.status(400).json({ error: 'macOS only' });
+      return;
+    }
+    const { action } = req.body; // 'toggle'
+    if (caffeinateProc) {
+      caffeinateProc.kill();
+      caffeinateProc = null;
+      console.log('☕ caffeinate 종료');
+      res.json({ active: false });
+    } else {
+      caffeinateProc = spawn('caffeinate', ['-d', '-i', '-s'], { stdio: 'ignore' });
+      caffeinateProc.on('exit', () => { caffeinateProc = null; });
+      console.log('☕ caffeinate 시작');
+      res.json({ active: true });
     }
   });
 
