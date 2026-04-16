@@ -7,14 +7,36 @@ export interface CaptureOptions {
   scale: number;
 }
 
+export interface DisplayInfo {
+  id: string;
+  name: string;
+}
+
 export interface CaptureSession {
   stop: () => void;
   updateQuality: (quality: number, scale: number) => void;
   updateFps: (fps: number) => void;
+  setDisplay: (id: string) => void;
+}
+
+let currentDisplayId: string | undefined;
+
+export async function listDisplays(): Promise<DisplayInfo[]> {
+  try {
+    const displays = await screenshot.listDisplays();
+    return displays.map((d: any, i: number) => ({
+      id: String(d.id),
+      name: d.name || `Display ${i + 1}`,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function captureFrame(quality: number, scale: number): Promise<Buffer> {
-  const imgBuffer = await screenshot({ format: 'png' }) as Buffer;
+  const opts: any = { format: 'png' };
+  if (currentDisplayId) opts.screen = currentDisplayId;
+  const imgBuffer = await screenshot(opts) as Buffer;
   const metadata = await sharp(imgBuffer).metadata();
   const width = Math.round((metadata.width || 1920) * scale);
   const height = Math.round((metadata.height || 1080) * scale);
@@ -25,8 +47,10 @@ export async function captureFrame(quality: number, scale: number): Promise<Buff
     .toBuffer();
 }
 
-export async function getScreenSize(): Promise<{ width: number; height: number }> {
-  const imgBuffer = await screenshot({ format: 'png' }) as Buffer;
+export async function getScreenSize(displayId?: string): Promise<{ width: number; height: number }> {
+  const opts: any = { format: 'png' };
+  if (displayId) opts.screen = displayId;
+  const imgBuffer = await screenshot(opts) as Buffer;
   const metadata = await sharp(imgBuffer).metadata();
   return {
     width: metadata.width || 1920,
@@ -70,6 +94,9 @@ export function startCapture(
     },
     updateFps: (fps: number) => {
       currentInterval = 1000 / Math.max(1, Math.min(30, fps));
+    },
+    setDisplay: (id: string) => {
+      currentDisplayId = id;
     },
   };
 }

@@ -25,8 +25,7 @@
   #stream { display: none; flex-direction: column; height: 100dvh; height: 100vh; }
   @supports (height: 100dvh) { #stream { height: 100dvh; } }
   #cvs-wrap { flex: 1; min-height: 0; background: #000; position: relative; overflow: hidden; }
-  #cvs { display: block; transform-origin: 0 0; }
-  #cvs.fit { width: 100%; height: 100%; object-fit: contain; }
+  #cvs { width: 100%; height: 100%; object-fit: contain; display: block; transform-origin: 0 0; }
 
   /* Touch indicator */
   #touch-dot { display: none; position: fixed; width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(74,158,255,0.8); background: rgba(74,158,255,0.25); transform: translate(-50%,-50%); pointer-events: none; z-index: 90; transition: opacity 0.3s; }
@@ -94,7 +93,7 @@
 </div>
 
 <div id="stream">
-  <div id="cvs-wrap"><canvas id="cvs" class="fit"></canvas></div>
+  <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
   <div id="touch-dot"></div>
   <div id="zoom-badge"></div>
 
@@ -113,6 +112,7 @@
   <div id="toolbar">
     <button class="tb" id="tb-kb">⌨ 키보드</button>
     <button class="tb" id="tb-apps">앱 전환</button>
+    <button class="tb" id="tb-disp">모니터</button>
     <button class="tb" id="tb-rc">우클릭</button>
     <button class="tb" id="tb-zreset">줌 리셋</button>
     <button class="tb" data-key="Escape">ESC</button>
@@ -215,11 +215,17 @@
 
   // --- Helpers ---
   function ratio(e){
-    var r=cvs.getBoundingClientRect(), ca=cvs.width/cvs.height, ra=r.width/r.height;
+    var wr=cvsWrap.getBoundingClientRect();
+    // Convert screen point to wrapper-local, then undo zoom transform
+    var localX=((e.clientX-wr.left)-panX)/zoom;
+    var localY=((e.clientY-wr.top)-panY)/zoom;
+    // Now localX/localY are in the un-zoomed canvas CSS space
+    // Account for object-fit:contain letterboxing
+    var ca=cvs.width/cvs.height, ra=wr.width/wr.height;
     var rw,rh,ox,oy;
-    if(ca>ra){rw=r.width;rh=r.width/ca;ox=0;oy=(r.height-rh)/2;}
-    else{rh=r.height;rw=r.height*ca;ox=(r.width-rw)/2;oy=0;}
-    return{x:Math.max(0,Math.min(1,(e.clientX-r.left-ox)/rw)),y:Math.max(0,Math.min(1,(e.clientY-r.top-oy)/rh))};
+    if(ca>ra){rw=wr.width;rh=wr.width/ca;ox=0;oy=(wr.height-rh)/2;}
+    else{rh=wr.height;rw=wr.height*ca;ox=(wr.width-rw)/2;oy=0;}
+    return{x:Math.max(0,Math.min(1,(localX-ox)/rw)),y:Math.max(0,Math.min(1,(localY-oy)/rh))};
   }
   function si(m){if(ws&&ws.readyState===1)ws.send(JSON.stringify(m));}
 
@@ -232,26 +238,20 @@
     dotTimer=setTimeout(function(){touchDot.classList.add('fade');setTimeout(function(){touchDot.classList.remove('show','fade');},300);},500);
   }
 
-  // Zoom/pan — zoom centers on pinch midpoint
+  // Zoom/pan — canvas always keeps object-fit:contain, only transform changes
   function applyZoom(){
-    if(zoom<=1){zoom=1;panX=0;panY=0;cvs.classList.add('fit');cvs.style.transform='';cvs.style.width='';cvs.style.height='';zoomBadge.classList.remove('show');return;}
-    cvs.classList.remove('fit');
+    if(zoom<=1){zoom=1;panX=0;panY=0;cvs.style.transform='';zoomBadge.classList.remove('show');return;}
     var wr=cvsWrap.getBoundingClientRect();
-    cvs.style.width=wr.width+'px';cvs.style.height=wr.height+'px';
-    // Clamp pan so content doesn't go out of view
     var maxPX=wr.width*(zoom-1), maxPY=wr.height*(zoom-1);
     panX=Math.max(-maxPX,Math.min(0,panX));panY=Math.max(-maxPY,Math.min(0,panY));
     cvs.style.transform='translate('+panX+'px,'+panY+'px) scale('+zoom+')';
     zoomBadge.textContent=zoom.toFixed(1)+'x';zoomBadge.classList.add('show');
   }
-  // Zoom toward a specific screen point (pinch center)
   function zoomAt(newZoom,cx,cy){
     var wr=cvsWrap.getBoundingClientRect();
-    var px=cx-wr.left, py=cy-wr.top; // point relative to wrapper
-    // Content point under the pinch center before zoom
+    var px=cx-wr.left, py=cy-wr.top;
     var contentX=(px-panX)/zoom, contentY=(py-panY)/zoom;
     zoom=Math.max(1,Math.min(5,newZoom));
-    // Adjust pan so the same content point stays under the pinch center
     panX=px-contentX*zoom; panY=py-contentY*zoom;
     applyZoom();
   }
@@ -376,6 +376,7 @@
   var appList=document.getElementById('app-list'), appItems=document.getElementById('app-items');
   tbClick('tb-apps', async function(){
     if(appList.classList.contains('show')){appList.classList.remove('show');return;}
+    document.querySelector('#app-list .app-header span').textContent='실행 중인 앱';
     appItems.innerHTML='<div style="padding:16px;color:#888;">로딩 중...</div>';
     appList.classList.add('show');
     try{
@@ -395,6 +396,30 @@
     }catch(e){appItems.innerHTML='<div style="padding:16px;color:#f66;">불러오기 실패</div>';}
   });
   document.getElementById('app-close').onclick=function(){appList.classList.remove('show');};
+
+  // Display switcher — reuses app-list panel
+  tbClick('tb-disp', async function(){
+    if(appList.classList.contains('show')){appList.classList.remove('show');return;}
+    appItems.innerHTML='<div style="padding:16px;color:#888;">로딩 중...</div>';
+    document.querySelector('#app-list .app-header span').textContent='모니터 선택';
+    appList.classList.add('show');
+    try{
+      var r=await fetch('/displays',{headers:{'Authorization':'Bearer '+token}});
+      var d=await r.json();
+      appItems.innerHTML='';
+      d.displays.forEach(function(disp){
+        var el=document.createElement('div');
+        el.className='app-item';
+        el.textContent=disp.name+' ('+disp.id+')';
+        el.onclick=function(){
+          si({type:'switch-display',id:disp.id});
+          appList.classList.remove('show');
+        };
+        appItems.appendChild(el);
+      });
+      if(d.displays.length===0)appItems.innerHTML='<div style="padding:16px;color:#888;">모니터를 찾을 수 없습니다</div>';
+    }catch(e){appItems.innerHTML='<div style="padding:16px;color:#f66;">불러오기 실패</div>';}
+  });
 
   document.querySelectorAll('.tb[data-key]').forEach(function(b){
     var k=b.getAttribute('data-key');

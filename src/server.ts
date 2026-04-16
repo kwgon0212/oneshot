@@ -10,7 +10,7 @@ import {
   ensureMacHelper, getMainDisplayPoints,
 } from './input-handler';
 import { execSync } from 'child_process';
-import { startCapture, getScreenSize, CaptureOptions, CaptureSession } from './capture';
+import { startCapture, getScreenSize, listDisplays, CaptureOptions, CaptureSession } from './capture';
 
 interface ServerOptions {
   port: number;
@@ -106,6 +106,18 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
   }
 
   setScreenSize(displayWidth, displayHeight);
+
+  // Displays endpoint
+  app.get('/displays', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const tk = authHeader?.replace('Bearer ', '');
+    if (!tk || !isValidToken(tk, sessionTokens)) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    const displays = await listDisplays();
+    res.json({ displays });
+  });
 
   // Running apps endpoint (macOS)
   app.get('/apps', (req, res) => {
@@ -261,6 +273,11 @@ end tell`;
         case 'set-fps':
           if (msg.fps && captureSession) {
             captureSession.updateFps(msg.fps);
+          }
+          break;
+        case 'switch-display':
+          if (msg.id && captureSession) {
+            captureSession.setDisplay(msg.id);
           }
           break;
         case 'activate-app':
