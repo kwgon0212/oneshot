@@ -213,6 +213,19 @@ int main(int argc, char *argv[]) {
             CFRelease(str);
         }
     }
+    else if (strcmp(argv[1], "brightness") == 0 && argc >= 3) {
+        // Get/set display brightness via CoreDisplay private API
+        extern double CoreDisplay_Display_GetUserBrightness(CGDirectDisplayID id);
+        extern void CoreDisplay_Display_SetUserBrightness(CGDirectDisplayID id, double val);
+        CGDirectDisplayID did = CGMainDisplayID();
+        if (strcmp(argv[2], "get") == 0) {
+            printf("%.3f\\n", CoreDisplay_Display_GetUserBrightness(did));
+        } else {
+            double val = atof(argv[2]);
+            CoreDisplay_Display_SetUserBrightness(did, val);
+        }
+        return 0;
+    }
     else if (strcmp(argv[1], "daemon") == 0) {
         setbuf(stdout, NULL);
         char line[256];
@@ -287,7 +300,7 @@ export function ensureMacHelper(): void {
   writeFileSync(srcPath, HELPER_SOURCE);
 
   try {
-    execSync(`cc -mmacosx-version-min=14.0 -framework ApplicationServices -framework ImageIO -o "${HELPER_PATH}" "${srcPath}"`, {
+    execSync(`cc -mmacosx-version-min=14.0 -framework ApplicationServices -framework ImageIO -framework CoreDisplay -o "${HELPER_PATH}" "${srcPath}"`, {
       stdio: 'ignore',
       timeout: 30000,
     });
@@ -312,6 +325,15 @@ function macHelperSync(args: string[]): string {
   } catch { return ''; }
 }
 
+
+export function getBrightness(): number {
+  const out = macHelperSync(['brightness', 'get']);
+  return out ? parseFloat(out) : -1;
+}
+
+export function setBrightness(val: number): void {
+  macHelper(['brightness', String(Math.max(0, Math.min(1, val)))]);
+}
 
 export function getDisplayBounds(index: number): { x: number; y: number; w: number; h: number } | null {
   const out = macHelperSync(['display-bounds', String(index)]);
