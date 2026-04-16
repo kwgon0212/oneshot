@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Remote Desktop</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; color: #eee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; height: 100vh; width: 100vw; }
+
+  /* Login Screen */
+  #login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
+  .login-box { background: #16213e; padding: 40px; border-radius: 12px; text-align: center; min-width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .login-box h1 { font-size: 24px; margin-bottom: 8px; }
+  .login-box p { color: #888; margin-bottom: 24px; font-size: 14px; }
+  .login-box input { width: 100%; padding: 12px 16px; border: 2px solid #333; border-radius: 8px; background: #0f1629; color: #eee; font-size: 16px; outline: none; margin-bottom: 16px; }
+  .login-box input:focus { border-color: #4a9eff; }
+  .login-box button { width: 100%; padding: 12px; border: none; border-radius: 8px; background: #4a9eff; color: #fff; font-size: 16px; cursor: pointer; font-weight: 600; }
+  .login-box button:hover { background: #3a8eef; }
+  .login-box button:disabled { background: #555; cursor: not-allowed; }
+  .login-error { color: #ff6b6b; margin-top: 12px; font-size: 14px; display: none; }
+
+  /* Stream Screen */
+  #stream-screen { display: none; width: 100vw; height: 100vh; position: relative; }
+  #canvas { width: 100%; height: 100%; object-fit: contain; cursor: default; display: block; background: #000; }
+
+  /* Status Bar */
+  #status-bar { position: fixed; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-family: monospace; z-index: 100; display: none; }
+
+  /* Reconnect Overlay */
+  #reconnect-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; flex-direction: column; }
+  .spinner { width: 40px; height: 40px; border: 3px solid #333; border-top-color: #4a9eff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #reconnect-msg { font-size: 16px; color: #ccc; }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>Remote Desktop</h1>
+    <p>비밀번호를 입력하세요</p>
+    <input type="password" id="password-input" placeholder="비밀번호" autofocus>
+    <button id="connect-btn">연결</button>
+    <div class="login-error" id="login-error">비밀번호가 틀렸습니다</div>
+  </div>
+</div>
+
+<!-- Stream -->
+<div id="stream-screen">
+  <canvas id="canvas"></canvas>
+  <div id="status-bar">
+    <span id="fps-display">0 FPS</span> |
+    <span id="quality-display">Q:75</span>
+  </div>
+</div>
+
+<!-- Reconnect Overlay -->
+<div id="reconnect-overlay">
+  <div class="spinner"></div>
+  <div id="reconnect-msg">재연결 중...</div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // --- State ---
+  let ws = null;
+  let token = null;
+  let screenWidth = 1920;
+  let screenHeight = 1080;
+  let reconnectAttempts = 0;
+  const MAX_RECONNECT = 10;
+  let frameCount = 0;
+  let lastFpsTime = Date.now();
+  let showStatus = false;
+
+  // --- Elements ---
+  const loginScreen = document.getElementById('login-screen');
+  const streamScreen = document.getElementById('stream-screen');
+  const passwordInput = document.getElementById('password-input');
+  const connectBtn = document.getElementById('connect-btn');
+  const loginError = document.getElementById('login-error');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const statusBar = document.getElementById('status-bar');
+  const fpsDisplay = document.getElementById('fps-display');
+  const qualityDisplay = document.getElementById('quality-display');
+  const reconnectOverlay = document.getElementById('reconnect-overlay');
+  const reconnectMsg = document.getElementById('reconnect-msg');
+
+  // --- Auth ---
+  async function authenticate() {
+    const pw = passwordInput.value;
+    if (!pw) return;
+    connectBtn.disabled = true;
+    loginError.style.display = 'none';
+
+    try {
+      const res = await fetch('/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      const data = await res.json();
+      if (data.type === 'auth-ok') {
+        token = data.token;
+        loginScreen.style.display = 'none';
+        streamScreen.style.display = 'block';
+        connectWebSocket();
+      } else {
+        loginError.style.display = 'block';
+        connectBtn.disabled = false;
+      }
+    } catch (err) {
+      loginError.textContent = '연결 실패. 다시 시도해주세요.';
+      loginError.style.display = 'block';
+      connectBtn.disabled = false;
+    }
+  }
+
+  connectBtn.addEventListener('click', authenticate);
+  passwordInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') authenticate();
+  });
+
+  // --- WebSocket ---
+  function getWsUrl() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return proto + '//' + location.host;
+  }
+
+  function connectWebSocket() {
+    ws = new WebSocket(getWsUrl());
+
+    ws.onopen = function() {
+      reconnectAttempts = 0;
+      reconnectOverlay.style.display = 'none';
+      ws.send(JSON.stringify({ type: 'auth', token: token }));
+    };
+
+    ws.onmessage = function(event) {
+      var msg;
+      try { msg = JSON.parse(event.data); } catch(e) { return; }
+
+      switch (msg.type) {
+        case 'auth-fail':
+          token = null;
+          loginScreen.style.display = 'flex';
+          streamScreen.style.display = 'none';
+          loginError.textContent = '세션 만료. 다시 로그인해주세요.';
+          loginError.style.display = 'block';
+          connectBtn.disabled = false;
+          break;
+
+        case 'screen-info':
+          screenWidth = msg.width;
+          screenHeight = msg.height;
+          canvas.width = msg.width;
+          canvas.height = msg.height;
+          break;
+
+        case 'frame':
+          renderFrame(msg.data);
+          break;
+
+        case 'quality-adjust':
+          qualityDisplay.textContent = 'Q:' + msg.quality;
+          break;
+      }
+    };
+
+    ws.onclose = function() {
+      if (!token) return;
+      attemptReconnect();
+    };
+
+    ws.onerror = function() {};
+  }
+
+  function attemptReconnect() {
+    if (reconnectAttempts >= MAX_RECONNECT) {
+      reconnectMsg.textContent = '연결 실패. 페이지를 새로고침 해주세요.';
+      reconnectOverlay.style.display = 'flex';
+      return;
+    }
+    reconnectAttempts++;
+    reconnectMsg.textContent = '재연결 중... (' + reconnectAttempts + '/' + MAX_RECONNECT + ')';
+    reconnectOverlay.style.display = 'flex';
+    setTimeout(connectWebSocket, 3000);
+  }
+
+  // --- Rendering ---
+  var img = new Image();
+  img.onload = function() {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    frameCount++;
+    var now = Date.now();
+    if (now - lastFpsTime >= 1000) {
+      fpsDisplay.textContent = frameCount + ' FPS';
+      frameCount = 0;
+      lastFpsTime = now;
+    }
+  };
+
+  function renderFrame(base64Data) {
+    img.src = 'data:image/jpeg;base64,' + base64Data;
+  }
+
+  // --- Input: Mouse ---
+  function getCanvasRatio(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+    };
+  }
+
+  function getButton(e) {
+    if (e.button === 2) return 'right';
+    if (e.button === 1) return 'middle';
+    return 'left';
+  }
+
+  function sendInput(msg) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  }
+
+  var lastMoveTime = 0;
+  canvas.addEventListener('mousemove', function(e) {
+    var now = Date.now();
+    if (now - lastMoveTime < 30) return;
+    lastMoveTime = now;
+    var r = getCanvasRatio(e);
+    sendInput({ type: 'mouse-move', x: r.x, y: r.y });
+  });
+
+  canvas.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    var r = getCanvasRatio(e);
+    sendInput({ type: 'mouse-down', x: r.x, y: r.y, button: getButton(e) });
+  });
+
+  canvas.addEventListener('mouseup', function(e) {
+    e.preventDefault();
+    var r = getCanvasRatio(e);
+    sendInput({ type: 'mouse-up', x: r.x, y: r.y, button: getButton(e) });
+  });
+
+  canvas.addEventListener('click', function(e) {
+    e.preventDefault();
+    var r = getCanvasRatio(e);
+    sendInput({ type: 'mouse-click', x: r.x, y: r.y, button: getButton(e) });
+  });
+
+  canvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    var r = getCanvasRatio(e);
+    var deltaY = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 10);
+    sendInput({ type: 'mouse-scroll', x: r.x, y: r.y, deltaY: deltaY });
+  }, { passive: false });
+
+  canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+
+  // --- Input: Keyboard ---
+  function getModifiers(e) {
+    var mods = [];
+    if (e.ctrlKey) mods.push('ctrl');
+    if (e.shiftKey) mods.push('shift');
+    if (e.altKey) mods.push('alt');
+    if (e.metaKey) mods.push('meta');
+    return mods;
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (streamScreen.style.display === 'none') return;
+    if (['F5', 'F11', 'F12'].includes(e.key) || (e.ctrlKey && ['r', 'w', 't', 'n', 'l'].includes(e.key.toLowerCase()))) {
+      e.preventDefault();
+    }
+    sendInput({ type: 'key-down', key: e.key, modifiers: getModifiers(e) });
+  });
+
+  document.addEventListener('keyup', function(e) {
+    if (streamScreen.style.display === 'none') return;
+    sendInput({ type: 'key-up', key: e.key });
+  });
+
+  // --- Input: Touch (Mobile) ---
+  var touchStartPos = null;
+  var lastTouchMoveTime = 0;
+
+  canvas.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      var touch = e.touches[0];
+      var r = getCanvasRatio(touch);
+      touchStartPos = r;
+      sendInput({ type: 'mouse-move', x: r.x, y: r.y });
+      sendInput({ type: 'mouse-down', x: r.x, y: r.y, button: 'left' });
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    var now = Date.now();
+    if (now - lastTouchMoveTime < 30) return;
+    lastTouchMoveTime = now;
+
+    if (e.touches.length === 1) {
+      var touch = e.touches[0];
+      var r = getCanvasRatio(touch);
+      sendInput({ type: 'mouse-move', x: r.x, y: r.y });
+    } else if (e.touches.length === 2) {
+      var t1 = e.touches[0];
+      var t2 = e.touches[1];
+      var dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      if (!canvas._lastPinchDist) {
+        canvas._lastPinchDist = dist;
+        return;
+      }
+      var delta = canvas._lastPinchDist - dist;
+      canvas._lastPinchDist = dist;
+      if (Math.abs(delta) > 2) {
+        var midR = getCanvasRatio({
+          clientX: (t1.clientX + t2.clientX) / 2,
+          clientY: (t1.clientY + t2.clientY) / 2,
+        });
+        sendInput({ type: 'mouse-scroll', x: midR.x, y: midR.y, deltaY: delta > 0 ? 3 : -3 });
+      }
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    canvas._lastPinchDist = null;
+    if (touchStartPos) {
+      sendInput({ type: 'mouse-up', x: touchStartPos.x, y: touchStartPos.y, button: 'left' });
+      touchStartPos = null;
+    }
+  }, { passive: false });
+
+  // --- Status Toggle (press 'i' to toggle) ---
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'i' && !e.ctrlKey && !e.altKey && !e.metaKey && streamScreen.style.display !== 'none') {
+      showStatus = !showStatus;
+      statusBar.style.display = showStatus ? 'block' : 'none';
+    }
+  });
+})();
+</script>
+</body>
+</html>
