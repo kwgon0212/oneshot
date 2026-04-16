@@ -40,7 +40,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
           value={username}
           onChange={e => setUsername(e.target.value)}
           onKeyDown={handleKeyDown}
-          autoComplete="username"
+          autoComplete="off"
         />
         <input
           ref={pwRef}
@@ -49,7 +49,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
           value={password}
           onChange={e => setPassword(e.target.value)}
           onKeyDown={handleKeyDown}
-          autoComplete="current-password"
+          autoComplete="off"
           style={{ marginTop: 8 }}
         />
         <button className="btn" onClick={handleSubmit} disabled={loading || !username || !password}>

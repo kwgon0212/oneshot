@@ -120,7 +120,8 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
       return;
     }
 
-    const { username: inputUser, password: inputPassword } = req.body;
+    const inputUser = (req.body.username || '').trim();
+    const inputPassword = (req.body.password || '').trim();
 
     if (inputUser === username && verifyPassword(inputPassword, password)) {
       // Success — reset attempts
