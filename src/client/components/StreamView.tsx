@@ -553,11 +553,7 @@ const StreamView: React.FC<StreamViewProps> = ({ onLogout }) => {
   // ── Mount / Unmount ───────────────────────────────────────────────────────
 
   useEffect(() => {
-    const token = ws.getToken?.();
-    tokenRef.current = token ?? null;
-    if (token) {
-      ws.connect(token);
-    }
+    tokenRef.current = ws.getToken?.() ?? null;
 
     ws.setHandlers({
       onMessage: handleMessage,
@@ -566,7 +562,6 @@ const StreamView: React.FC<StreamViewProps> = ({ onLogout }) => {
     });
 
     return () => {
-      ws.close();
       if (prevUrlRef.current) URL.revokeObjectURL(prevUrlRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

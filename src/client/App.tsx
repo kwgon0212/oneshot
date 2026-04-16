@@ -16,6 +16,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.type === 'auth-ok') {
+        ws.connect(data.token);
         setScreen('stream');
         setError('');
         return data.token as string;
