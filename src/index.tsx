@@ -65,7 +65,7 @@ async function startServer(config: Config): Promise<void> {
     // clipboardy may fail in some environments, ignore
   }
 
-  const qrcode = await import('qrcode-terminal');
+  const qrcode = (await import('qrcode-terminal')).default;
 
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`🌐 접속 URL:`);
