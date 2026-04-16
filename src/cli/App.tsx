@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { PasswordInput } from '@inkjs/ui';
+import { PasswordInput, TextInput } from '@inkjs/ui';
 
 export type Config = {
+  username: string;
   password: string;
   port: number;
   fps: number;
@@ -14,8 +15,8 @@ type Props = {
   onStart: (config: Config) => void;
 };
 
-type Field = 'password' | 'port' | 'fps' | 'quality' | 'scale' | 'start';
-const FIELDS: Field[] = ['password', 'port', 'fps', 'quality', 'scale', 'start'];
+type Field = 'username' | 'password' | 'port' | 'fps' | 'quality' | 'scale' | 'start';
+const FIELDS: Field[] = ['username', 'password', 'port', 'fps', 'quality', 'scale', 'start'];
 
 const DEFAULTS = {
   port: 3000,
@@ -32,12 +33,14 @@ const LIMITS: Record<string, { min: number; max: number; step: number }> = {
 };
 
 export function App({ onStart }: Props) {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [port, setPort] = useState(DEFAULTS.port);
   const [fps, setFps] = useState(DEFAULTS.fps);
   const [quality, setQuality] = useState(DEFAULTS.quality);
   const [scale, setScale] = useState(DEFAULTS.scale);
-  const [focused, setFocused] = useState<Field>('password');
+  const [focused, setFocused] = useState<Field>('username');
+  const [usernameDone, setUsernameDone] = useState(false);
   const [passwordDone, setPasswordDone] = useState(false);
 
   const adjust = useCallback((field: Field, dir: 1 | -1) => {
@@ -50,7 +53,7 @@ export function App({ onStart }: Props) {
   }, []);
 
   useInput((_, key) => {
-    if (focused === 'password') return; // PasswordInput handles its own input
+    if (focused === 'username' || focused === 'password') return; // TextInput/PasswordInput handle their own input
 
     if (key.tab || key.downArrow) {
       const idx = FIELDS.indexOf(focused);
@@ -66,9 +69,15 @@ export function App({ onStart }: Props) {
     if (key.rightArrow) adjust(focused, 1);
 
     if (key.return && focused === 'start') {
-      onStart({ password, port, fps, quality, scale });
+      onStart({ username, password, port, fps, quality, scale });
     }
   });
+
+  const handleUsernameSubmit = (val: string) => {
+    setUsername(val);
+    setUsernameDone(true);
+    setFocused('password');
+  };
 
   const handlePasswordSubmit = (val: string) => {
     setPassword(val);
@@ -83,6 +92,21 @@ export function App({ onStart }: Props) {
     <Box flexDirection="column" paddingLeft={2} paddingTop={1}>
       <Box marginBottom={1}>
         <Text bold>Remote Desktop</Text>
+      </Box>
+
+      {/* Username */}
+      <Box>
+        <Text color={highlight('username') ? 'cyan' : undefined}>
+          {cursor('username')}{'아이디:   '}
+        </Text>
+        {!usernameDone ? (
+          <TextInput
+            placeholder="아이디 입력 후 Enter"
+            onSubmit={handleUsernameSubmit}
+          />
+        ) : (
+          <Text>{username}</Text>
+        )}
       </Box>
 
       {/* Password */}

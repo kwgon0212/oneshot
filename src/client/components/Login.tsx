@@ -1,53 +1,61 @@
 import React, { useState, useRef, KeyboardEvent } from 'react';
 
 interface LoginProps {
-  onLogin: (password: string) => Promise<string | null>;
+  onLogin: (username: string, password: string) => Promise<string | null>;
   error: string;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const pwRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async () => {
-    if (!password || loading) return;
+    if (!username || !password || loading) return;
     setLoading(true);
-    await onLogin(password);
+    await onLogin(username, password);
     setLoading(false);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleSubmit();
+    if (e.key === 'Enter') {
+      if (e.currentTarget.type === 'text' && password === '') {
+        pwRef.current?.focus();
+      } else {
+        handleSubmit();
+      }
+    }
   };
 
   return (
     <div id="login">
       <div className="login-card">
-        <h1>Remote Desktop</h1>
-        <p className="sub">비밀번호를 입력하고 연결하세요</p>
+        <h1>Oneshot</h1>
+        <p className="sub">원격 데스크톱에 연결</p>
         <input
-          ref={inputRef}
+          type="text"
+          placeholder="아이디"
+          autoFocus
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          onKeyDown={handleKeyDown}
+          autoComplete="username"
+        />
+        <input
+          ref={pwRef}
           type="password"
           placeholder="비밀번호"
-          autoFocus
           value={password}
           onChange={e => setPassword(e.target.value)}
           onKeyDown={handleKeyDown}
+          autoComplete="current-password"
+          style={{ marginTop: 8 }}
         />
-        <button
-          className="btn"
-          onClick={handleSubmit}
-          disabled={loading}
-        >
-          연결
+        <button className="btn" onClick={handleSubmit} disabled={loading || !username || !password}>
+          {loading ? '연결 중...' : '연결'}
         </button>
-        <div
-          className="login-err"
-          style={{ display: error ? 'block' : 'none' }}
-        >
-          {error}
-        </div>
+        {error && <div className="login-err" style={{ display: 'block' }}>{error}</div>}
       </div>
     </div>
   );

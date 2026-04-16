@@ -5,7 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { verifyPassword, createSessionToken, isValidToken } from './auth.js';
+import { verifyPassword, createSessionToken } from './auth.js';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize, setScreenOffset,
@@ -19,9 +19,14 @@ const __dirname = dirname(__filename);
 
 interface ServerOptions {
   port: number;
+  username: string;
   password: string;
   captureOptions: CaptureOptions;
 }
+
+const SESSION_TTL = 30 * 60 * 1000; // 30분 세션 만료
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION = 30 * 1000; // 30초 잠금
 
 export interface ServerInstance {
   httpServer: http.Server;
@@ -64,27 +69,77 @@ function getWindowDisplayIndex(appName: string): number | null {
 }
 
 export async function createServer(options: ServerOptions): Promise<ServerInstance> {
-  const { port, password, captureOptions } = options;
+  const { port, username, password, captureOptions } = options;
   const app = express();
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
 
-  const sessionTokens = new Set<string>();
+  // Session management with expiry
+  const sessionTokens = new Map<string, number>(); // token → lastActive timestamp
   let activeClient: WebSocket | null = null;
   let captureSession: CaptureSession | null = null;
+
+  // Login attempt tracking per IP
+  const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
+
+  // Session cleanup interval
+  const cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [token, lastActive] of sessionTokens) {
+      if (now - lastActive > SESSION_TTL) {
+        sessionTokens.delete(token);
+      }
+    }
+  }, 60000);
+
+  function isTokenValid(token: string): boolean {
+    const lastActive = sessionTokens.get(token);
+    if (!lastActive) return false;
+    if (Date.now() - lastActive > SESSION_TTL) {
+      sessionTokens.delete(token);
+      return false;
+    }
+    sessionTokens.set(token, Date.now()); // refresh
+    return true;
+  }
 
   app.use(express.json());
   app.use(express.static(path.join(__dirname, 'public')));
 
-  // Auth endpoint
+  // Auth endpoint with rate limiting
   app.post('/auth', (req, res) => {
-    const { password: inputPassword } = req.body;
-    if (verifyPassword(inputPassword, password)) {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const attempt = loginAttempts.get(ip);
+    const now = Date.now();
+
+    // Check lockout
+    if (attempt && attempt.lockedUntil > now) {
+      const remaining = Math.ceil((attempt.lockedUntil - now) / 1000);
+      res.status(429).json({ type: 'auth-locked', remaining });
+      return;
+    }
+
+    const { username: inputUser, password: inputPassword } = req.body;
+
+    if (inputUser === username && verifyPassword(inputPassword, password)) {
+      // Success — reset attempts
+      loginAttempts.delete(ip);
       const token = createSessionToken();
-      sessionTokens.add(token);
+      sessionTokens.set(token, Date.now());
+      console.log(`🔓 로그인 성공 [${ip}]`);
       res.json({ type: 'auth-ok', token });
     } else {
-      res.status(401).json({ type: 'auth-fail' });
+      // Fail — increment attempts
+      const current = attempt?.count || 0;
+      const newCount = current + 1;
+      if (newCount >= MAX_LOGIN_ATTEMPTS) {
+        loginAttempts.set(ip, { count: newCount, lockedUntil: now + LOCKOUT_DURATION });
+        console.log(`🔒 로그인 잠금 [${ip}] — ${MAX_LOGIN_ATTEMPTS}회 실패`);
+        res.status(429).json({ type: 'auth-locked', remaining: LOCKOUT_DURATION / 1000 });
+      } else {
+        loginAttempts.set(ip, { count: newCount, lockedUntil: 0 });
+        res.status(401).json({ type: 'auth-fail', attemptsLeft: MAX_LOGIN_ATTEMPTS - newCount });
+      }
     }
   });
 
@@ -92,7 +147,7 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
   app.post('/shutdown', (req, res) => {
     const authHeader = req.headers.authorization;
     const token = authHeader?.replace('Bearer ', '');
-    if (!token || !isValidToken(token, sessionTokens)) {
+    if (!token || !isTokenValid(token)) {
       res.status(401).json({ error: 'unauthorized' });
       return;
     }
@@ -128,7 +183,7 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
   app.get('/displays', async (req, res) => {
     const authHeader = req.headers.authorization;
     const tk = authHeader?.replace('Bearer ', '');
-    if (!tk || !isValidToken(tk, sessionTokens)) { res.status(401).json({ error: 'unauthorized' }); return; }
+    if (!tk || !isTokenValid(tk)) { res.status(401).json({ error: 'unauthorized' }); return; }
     const displays = await listDisplays();
     res.json({ displays });
   });
@@ -137,7 +192,7 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
   app.get('/apps', (req, res) => {
     const authHeader = req.headers.authorization;
     const tk = authHeader?.replace('Bearer ', '');
-    if (!tk || !isValidToken(tk, sessionTokens)) { res.status(401).json({ error: 'unauthorized' }); return; }
+    if (!tk || !isTokenValid(tk)) { res.status(401).json({ error: 'unauthorized' }); return; }
     try {
       const script = `tell application "System Events"
   set o to ""
@@ -265,7 +320,7 @@ end tell`;
       try { msg = JSON.parse(rawData.toString()); } catch { return; }
 
       if (msg.type === 'auth') {
-        if (isValidToken(msg.token, sessionTokens)) {
+        if (isTokenValid(msg.token)) {
           authenticated = true;
           if (activeClient && activeClient !== ws && activeClient.readyState === WebSocket.OPEN) {
             activeClient.close(1000, 'New client connected');
@@ -328,7 +383,7 @@ end tell`;
       resolve({
         httpServer: server,
         wss,
-        close: () => { stopStreaming(); wss.close(); server.close(); },
+        close: () => { stopStreaming(); clearInterval(cleanupInterval); wss.close(); server.close(); },
       });
     });
   });

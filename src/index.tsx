@@ -34,12 +34,13 @@ function waitForUrl(url: string, maxRetries = 15): Promise<void> {
 }
 
 async function startServer(config: Config): Promise<void> {
-  const { password, port, fps, quality, scale } = config;
+  const { username, password, port, fps, quality, scale } = config;
 
   await checkPermissions();
 
   const server = await createServer({
     port,
+    username,
     password,
     captureOptions: { fps, quality, scale },
   });
@@ -92,14 +93,19 @@ async function startServer(config: Config): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
-// Parse --password flag from argv
+// Parse flags from argv
 const args = process.argv.slice(2);
-const passwordFlagIdx = args.indexOf('--password');
-const passwordFlag = passwordFlagIdx !== -1 ? args[passwordFlagIdx + 1] : undefined;
+function getFlag(name: string): string | undefined {
+  const idx = args.indexOf(`--${name}`);
+  return idx !== -1 ? args[idx + 1] : undefined;
+}
+const usernameFlag = getFlag('username');
+const passwordFlag = getFlag('password');
 
-if (passwordFlag) {
+if (usernameFlag && passwordFlag) {
   // Non-interactive: skip menu and start directly with defaults
   await startServer({
+    username: usernameFlag,
     password: passwordFlag,
     port: 3000,
     fps: 15,
