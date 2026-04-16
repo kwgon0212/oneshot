@@ -1,0 +1,36 @@
+{
+  "name": "remote-desktop-ts",
+  "version": "1.0.0",
+  "description": "Zero-config remote desktop via browser. One command, no setup.",
+  "main": "dist/index.js",
+  "bin": {
+    "remote-desktop-ts": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "jest --forceExit"
+  },
+  "keywords": ["remote-desktop", "screen-sharing", "cloudflare-tunnel"],
+  "license": "MIT",
+  "dependencies": {
+    "clipboardy": "^4.0.0",
+    "commander": "^12.0.0",
+    "express": "^4.21.0",
+    "qrcode-terminal": "^0.12.0",
+    "screenshot-desktop": "^1.15.0",
+    "sharp": "^0.33.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/ws": "^8.5.12",
+    "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.5.0"
+  }
+}
