@@ -43,7 +43,7 @@
   #confirm-no { background: #444; color: #ddd; }
   #confirm-no:hover { background: #555; }
 
-  /* Mobile Toolbar */
+  /* Mobile Toolbar — hidden by default, shown via JS based on UA */
   #mobile-toolbar { display: none; background: #16213e; border-top: 1px solid #333; padding: 6px 8px; z-index: 50; }
   #mobile-toolbar .toolbar-row { display: flex; gap: 6px; align-items: center; }
   #mobile-toolbar .toolbar-row + .toolbar-row { margin-top: 6px; }
@@ -60,9 +60,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   #reconnect-msg { font-size: 16px; color: #ccc; }
 
-  @media (pointer: coarse) {
-    #mobile-toolbar { display: block; }
-  }
+  body.is-mobile #mobile-toolbar { display: block; }
 </style>
 </head>
 <body>
@@ -149,7 +147,8 @@
   var frameCount = 0;
   var lastFpsTime = Date.now();
   var showStatus = false;
-  var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  var isMobile = /Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i.test(navigator.userAgent);
+  if (isMobile) document.body.classList.add('is-mobile');
   var rightClickMode = false;
   var stickyMods = { ctrl: false, alt: false, meta: false, shift: false };
 
