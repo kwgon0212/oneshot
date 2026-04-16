@@ -19,7 +19,7 @@ export interface CaptureSession {
   setDisplay: (id: string) => void;
 }
 
-let currentDisplayId: string | undefined;
+let currentDisplayId: number | undefined;
 
 export async function listDisplays(): Promise<DisplayInfo[]> {
   try {
@@ -96,7 +96,7 @@ export function startCapture(
       currentInterval = 1000 / Math.max(1, Math.min(30, fps));
     },
     setDisplay: (id: string) => {
-      currentDisplayId = id;
+      currentDisplayId = parseInt(id, 10);
     },
   };
 }

@@ -77,7 +77,13 @@
   #app-list .app-header { padding: 12px 16px; font-size: 14px; color: #888; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: #1a1a1a; }
   #app-list .app-header button { background: none; border: none; color: #4a9eff; font-size: 14px; cursor: pointer; padding: 4px 8px; }
   .app-item { padding: 14px 16px; border-bottom: 1px solid #222; font-size: 15px; color: #eee; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  .app-item:active { background: #4a9eff; }
+  .app-item:active { background: #333; }
+  .app-name { font-weight: 500; }
+  .app-win-count { color: #888; font-size: 12px; margin-left: 6px; }
+  .win-list { display: none; background: #111; }
+  .win-list.show { display: block; }
+  .win-item { padding: 12px 16px 12px 32px; border-bottom: 1px solid #1a1a1a; font-size: 13px; color: #bbb; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .win-item:active { background: #4a9eff; color: #fff; }
 </style>
 </head>
 <body>
@@ -384,20 +390,54 @@
       var d=await r.json();
       appItems.innerHTML='';
       d.apps.forEach(function(app){
+        var wrap=document.createElement('div');
         var el=document.createElement('div');
         el.className='app-item';
-        var label=app.name;
-        if(app.windows&&app.windows.length>0){
-          var winText=app.windows.slice(0,2).join(', ');
-          if(app.windows.length>2) winText+=' +' +(app.windows.length-2);
-          label+=' — '+winText;
+        var nameSpan=document.createElement('span');
+        nameSpan.className='app-name';
+        nameSpan.textContent=app.name;
+        el.appendChild(nameSpan);
+
+        var wins=app.windows||[];
+        if(wins.length>1){
+          // Multiple windows — show count, click to expand
+          var countSpan=document.createElement('span');
+          countSpan.className='app-win-count';
+          countSpan.textContent='('+wins.length+'개 윈도우)';
+          el.appendChild(countSpan);
+
+          var winList=document.createElement('div');
+          winList.className='win-list';
+          wins.forEach(function(wName,idx){
+            var wi=document.createElement('div');
+            wi.className='win-item';
+            wi.textContent=(idx+1)+'. '+wName;
+            wi.onclick=function(e){
+              e.stopPropagation();
+              si({type:'activate-app',name:app.name,window:String(idx+1)});
+              appList.classList.remove('show');
+            };
+            winList.appendChild(wi);
+          });
+
+          el.onclick=function(){winList.classList.toggle('show');};
+          wrap.appendChild(el);
+          wrap.appendChild(winList);
+        } else {
+          // Single or no window — click to activate directly
+          if(wins.length===1){
+            var sub=document.createElement('div');
+            sub.style.cssText='font-size:12px;color:#888;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+            sub.textContent=wins[0];
+            el.appendChild(sub);
+          }
+          el.onclick=function(){
+            si({type:'activate-app',name:app.name});
+            appList.classList.remove('show');
+          };
+          wrap.appendChild(el);
         }
-        el.textContent=label;
-        el.onclick=function(){
-          si({type:'activate-app',name:app.name});
-          appList.classList.remove('show');
-        };
-        appItems.appendChild(el);
+        appItems.appendChild(wrap);
       });
     }catch(e){appItems.innerHTML='<div style="padding:16px;color:#f66;">불러오기 실패</div>';}
   });

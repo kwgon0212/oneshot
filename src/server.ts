@@ -44,6 +44,47 @@ function getSystemStats() {
   return { cpuPercent, memPercent, memUsedGB, memTotalGB };
 }
 
+// Get window position and find which display index it's on
+function getWindowDisplayIndex(appName: string): number | null {
+  try {
+    const safe = appName.replace(/[^a-zA-Z0-9 \-_.가-힣]/g, '');
+    const posOut = execSync(
+      `osascript -e 'tell application "System Events" to get position of window 1 of process "${safe}"'`,
+      { encoding: 'utf-8', timeout: 3000 }
+    ).trim();
+    const [wx, wy] = posOut.split(',').map((s: string) => parseInt(s.trim(), 10));
+    if (isNaN(wx) || isNaN(wy)) return null;
+
+    // Get all display bounds to find which contains the window
+    const boundsOut = execSync(
+      `osascript -l JavaScript -e '
+        ObjC.import("CoreGraphics");
+        var n = $.CGGetActiveDisplayList.maximum;
+        var ids = Ref();
+        var count = Ref();
+        $.CGGetActiveDisplayList(10, ids, count);
+        var c = count[0];
+        var result = [];
+        for (var i = 0; i < c; i++) {
+          var b = $.CGDisplayBounds(ids[i]);
+          result.push(b.origin.x + "," + b.origin.y + "," + b.size.width + "," + b.size.height);
+        }
+        result.join("\\n");
+      '`,
+      { encoding: 'utf-8', timeout: 3000 }
+    ).trim();
+
+    const displays = boundsOut.split('\n');
+    for (let i = 0; i < displays.length; i++) {
+      const [dx, dy, dw, dh] = displays[i].split(',').map(Number);
+      if (wx >= dx && wx < dx + dw && wy >= dy && wy < dy + dh) {
+        return i;
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 export async function createServer(options: ServerOptions): Promise<ServerInstance> {
   const { port, password, captureOptions } = options;
   const app = express();
@@ -54,7 +95,6 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
   let activeClient: WebSocket | null = null;
   let captureSession: CaptureSession | null = null;
 
-  // Serve static files
   app.use(express.json());
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -85,13 +125,12 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
     }, 500);
   });
 
-  // Compile macOS mouse helper if needed
+  // Compile macOS mouse helper
   if (process.platform === 'darwin') {
     ensureMacHelper();
   }
 
-  // Get screen size — use POINT dimensions for coordinate mapping (not pixels)
-  // On Retina displays, screenshot pixels != mouse coordinate points
+  // Screen size
   const screenshotSize = await getScreenSize();
   let displayWidth = screenshotSize.width;
   let displayHeight = screenshotSize.height;
@@ -111,24 +150,17 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
   app.get('/displays', async (req, res) => {
     const authHeader = req.headers.authorization;
     const tk = authHeader?.replace('Bearer ', '');
-    if (!tk || !isValidToken(tk, sessionTokens)) {
-      res.status(401).json({ error: 'unauthorized' });
-      return;
-    }
+    if (!tk || !isValidToken(tk, sessionTokens)) { res.status(401).json({ error: 'unauthorized' }); return; }
     const displays = await listDisplays();
     res.json({ displays });
   });
 
-  // Running apps endpoint (macOS)
+  // Apps endpoint — returns apps with window titles
   app.get('/apps', (req, res) => {
     const authHeader = req.headers.authorization;
     const tk = authHeader?.replace('Bearer ', '');
-    if (!tk || !isValidToken(tk, sessionTokens)) {
-      res.status(401).json({ error: 'unauthorized' });
-      return;
-    }
+    if (!tk || !isValidToken(tk, sessionTokens)) { res.status(401).json({ error: 'unauthorized' }); return; }
     try {
-      // Get apps with their window titles
       const script = `tell application "System Events"
   set o to ""
   set pList to every process whose background only is false
@@ -151,10 +183,7 @@ end tell`;
 
       const apps = lines.map((line: string) => {
         const parts = line.split('||');
-        return {
-          name: parts[0],
-          windows: parts.slice(1).filter(Boolean),
-        };
+        return { name: parts[0], windows: parts.slice(1).filter(Boolean) };
       });
       res.json({ apps });
     } catch (e: any) {
@@ -163,29 +192,23 @@ end tell`;
     }
   });
 
-  // Adaptive quality state
+  // Adaptive quality
   let currentQuality = captureOptions.quality;
   let currentScale = captureOptions.scale;
   const targetFrameTime = 1000 / captureOptions.fps;
-
-  // System stats interval
   let statsInterval: ReturnType<typeof setInterval> | null = null;
 
   function broadcastFrame(jpeg: Buffer): void {
     if (!activeClient || activeClient.readyState !== WebSocket.OPEN) return;
-
     const start = Date.now();
     const base64 = jpeg.toString('base64');
     activeClient.send(JSON.stringify({ type: 'frame', data: base64 }), () => {
       const elapsed = Date.now() - start;
-
       if (elapsed > targetFrameTime * 1.5) {
         currentQuality = Math.max(20, currentQuality - 5);
         currentScale = Math.max(0.3, currentScale - 0.05);
         captureSession?.updateQuality(currentQuality, currentScale);
-        activeClient?.send(JSON.stringify({
-          type: 'quality-adjust', quality: currentQuality, scale: currentScale,
-        }));
+        activeClient?.send(JSON.stringify({ type: 'quality-adjust', quality: currentQuality, scale: currentScale }));
       } else if (elapsed < targetFrameTime * 0.5) {
         currentQuality = Math.min(captureOptions.quality, currentQuality + 2);
         currentScale = Math.min(captureOptions.scale, currentScale + 0.02);
@@ -197,8 +220,6 @@ end tell`;
   function startStreaming(): void {
     if (captureSession) return;
     captureSession = startCapture(captureOptions, broadcastFrame);
-
-    // Start sending system stats every 2 seconds
     if (!statsInterval) {
       statsInterval = setInterval(() => {
         if (activeClient && activeClient.readyState === WebSocket.OPEN) {
@@ -209,14 +230,44 @@ end tell`;
   }
 
   function stopStreaming(): void {
+    if (captureSession) { captureSession.stop(); captureSession = null; }
+    if (statsInterval) { clearInterval(statsInterval); statsInterval = null; }
+  }
+
+  // Switch capture to a display by index
+  function switchDisplay(displayIdx: number) {
     if (captureSession) {
-      captureSession.stop();
-      captureSession = null;
+      captureSession.setDisplay(String(displayIdx));
+      activeClient?.send(JSON.stringify({ type: 'display-changed', id: displayIdx }));
     }
-    if (statsInterval) {
-      clearInterval(statsInterval);
-      statsInterval = null;
-    }
+  }
+
+  // Activate app, optionally a specific window, and auto-switch display
+  function activateApp(appName: string, windowIndex?: number) {
+    const safe = appName.replace(/[^a-zA-Z0-9 \-_.가-힣]/g, '');
+    try {
+      if (windowIndex !== undefined && windowIndex >= 1) {
+        const script = `tell application "System Events"
+  tell process "${safe}"
+    set frontmost to true
+    try
+      perform action "AXRaise" of window ${windowIndex}
+    end try
+  end tell
+end tell`;
+        execSync(`osascript -e '${script}'`, { stdio: 'ignore', timeout: 3000 });
+      } else {
+        execSync(`osascript -e 'tell application "${safe}" to activate'`, { stdio: 'ignore', timeout: 3000 });
+      }
+
+      // Auto-switch capture to the display where this app's window is
+      setTimeout(() => {
+        const idx = getWindowDisplayIndex(safe);
+        if (idx !== null) {
+          switchDisplay(idx);
+        }
+      }, 300); // Small delay for window to finish moving
+    } catch { /* ignore */ }
   }
 
   // WebSocket handling
@@ -225,31 +276,16 @@ end tell`;
 
     ws.on('message', (rawData) => {
       let msg: any;
-      try {
-        msg = JSON.parse(rawData.toString());
-      } catch {
-        return;
-      }
+      try { msg = JSON.parse(rawData.toString()); } catch { return; }
 
-      // Auth message
       if (msg.type === 'auth') {
         if (isValidToken(msg.token, sessionTokens)) {
           authenticated = true;
-
-          // Disconnect previous client (single viewer)
           if (activeClient && activeClient !== ws && activeClient.readyState === WebSocket.OPEN) {
             activeClient.close(1000, 'New client connected');
           }
           activeClient = ws;
-
-          // Send screen info (send screenshot pixel dimensions for canvas sizing)
-          ws.send(JSON.stringify({
-            type: 'screen-info',
-            width: screenshotSize.width,
-            height: screenshotSize.height,
-          }));
-
-          // Start streaming
+          ws.send(JSON.stringify({ type: 'screen-info', width: screenshotSize.width, height: screenshotSize.height }));
           startStreaming();
         } else {
           ws.send(JSON.stringify({ type: 'auth-fail' }));
@@ -258,54 +294,25 @@ end tell`;
         return;
       }
 
-      // All other messages require auth
-      if (!authenticated) {
-        ws.send(JSON.stringify({ type: 'auth-fail' }));
-        return;
-      }
+      if (!authenticated) { ws.send(JSON.stringify({ type: 'auth-fail' })); return; }
 
-      // Input events
       switch (msg.type) {
-        case 'mouse-move':
-          handleMouseMove(msg.x, msg.y);
-          break;
-        case 'mouse-click':
-          handleMouseClick(msg.x, msg.y, msg.button || 'left');
-          break;
-        case 'mouse-down':
-          handleMouseDown(msg.x, msg.y, msg.button || 'left');
-          break;
-        case 'mouse-up':
-          handleMouseUp(msg.x, msg.y, msg.button || 'left');
-          break;
-        case 'mouse-scroll':
-          handleMouseScroll(msg.x, msg.y, msg.deltaY || 0);
-          break;
-        case 'key-down':
-          handleKeyDown(msg.key, msg.modifiers || []);
-          break;
-        case 'key-up':
-          handleKeyUp(msg.key);
-          break;
+        case 'mouse-move': handleMouseMove(msg.x, msg.y); break;
+        case 'mouse-click': handleMouseClick(msg.x, msg.y, msg.button || 'left'); break;
+        case 'mouse-down': handleMouseDown(msg.x, msg.y, msg.button || 'left'); break;
+        case 'mouse-up': handleMouseUp(msg.x, msg.y, msg.button || 'left'); break;
+        case 'mouse-scroll': handleMouseScroll(msg.x, msg.y, msg.deltaY || 0); break;
+        case 'key-down': handleKeyDown(msg.key, msg.modifiers || []); break;
+        case 'key-up': handleKeyUp(msg.key); break;
         case 'set-fps':
-          if (msg.fps && captureSession) {
-            captureSession.updateFps(msg.fps);
-          }
+          if (msg.fps && captureSession) captureSession.updateFps(msg.fps);
           break;
         case 'switch-display':
-          if (msg.id && captureSession) {
-            captureSession.setDisplay(msg.id);
-          }
+          switchDisplay(parseInt(msg.id, 10));
           break;
         case 'activate-app':
           if (msg.name && typeof msg.name === 'string') {
-            // Sanitize app name to prevent injection
-            const safe = msg.name.replace(/[^a-zA-Z0-9 \-_.가-힣]/g, '');
-            try {
-              execSync(`osascript -e 'tell application "${safe}" to activate'`, {
-                stdio: 'ignore', timeout: 3000,
-              });
-            } catch { /* ignore */ }
+            activateApp(msg.name, msg.window ? parseInt(msg.window, 10) : undefined);
           }
           break;
       }
@@ -326,11 +333,7 @@ end tell`;
       resolve({
         httpServer: server,
         wss,
-        close: () => {
-          stopStreaming();
-          wss.close();
-          server.close();
-        },
+        close: () => { stopStreaming(); wss.close(); server.close(); },
       });
     });
   });
