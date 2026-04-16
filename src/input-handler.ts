@@ -193,34 +193,6 @@ function macHelper(args: string[]): void {
   }
 }
 
-export function getCurrentSpace(): number {
-  if (!helperReady) return 0;
-  try {
-    const out = execFileSync(HELPER_PATH, ['current-space'], { encoding: 'utf-8', timeout: 2000 }).trim();
-    return parseInt(out, 10) || 0;
-  } catch { return 0; }
-}
-
-export function switchToSpace(n: number): void {
-  const current = getCurrentSpace();
-  if (current === 0 || current === n) return;
-  const delta = n - current;
-  const key = delta > 0 ? 'ArrowRight' : 'ArrowLeft';
-  const steps = Math.abs(delta);
-  for (let i = 0; i < steps; i++) {
-    handleKeyDown(key, ['ctrl']);
-    // Small delay between steps so macOS can process each transition
-    try { execSync('sleep 0.3', { stdio: 'ignore' }); } catch { /* ignore */ }
-  }
-}
-
-export function getSpaceCount(): number {
-  if (!helperReady) return 0;
-  try {
-    const out = execFileSync(HELPER_PATH, ['spaces'], { encoding: 'utf-8', timeout: 2000 }).trim();
-    return parseInt(out, 10) || 0;
-  } catch { return 0; }
-}
 
 // Returns main display size in POINTS (not pixels) for correct coordinate mapping
 export function getMainDisplayPoints(): { width: number; height: number } | null {

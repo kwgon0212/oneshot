@@ -7,8 +7,9 @@ import { verifyPassword, createSessionToken, isValidToken } from './auth';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize,
-  ensureMacHelper, getMainDisplayPoints, getSpaceCount, switchToSpace,
+  ensureMacHelper, getMainDisplayPoints,
 } from './input-handler';
+import { execSync } from 'child_process';
 import { startCapture, getScreenSize, CaptureOptions, CaptureSession } from './capture';
 
 interface ServerOptions {
@@ -106,9 +107,38 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
 
   setScreenSize(displayWidth, displayHeight);
 
-  // Get space/desktop count
-  const spaceCount = process.platform === 'darwin' ? getSpaceCount() : 0;
-  if (spaceCount > 0) console.log(`🖥️  데스크톱: ${spaceCount}개`);
+  // Running apps endpoint (macOS)
+  app.get('/apps', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const tk = authHeader?.replace('Bearer ', '');
+    if (!tk || !isValidToken(tk, sessionTokens)) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    try {
+      const raw = execSync(
+        `osascript -e 'tell application "System Events" to get {name, displayed name} of every process whose background only is false'`,
+        { encoding: 'utf-8', timeout: 5000 }
+      ).trim();
+      // Parse AppleScript list output: "name1, name2, name3, dispName1, dispName2, dispName3"
+      // Actually the output format from getting two properties is two lists
+      // Let's use a simpler approach
+      const names = execSync(
+        `osascript -e 'set output to ""
+tell application "System Events"
+  set appList to every process whose background only is false
+  repeat with a in appList
+    set output to output & name of a & "\\n"
+  end repeat
+end tell
+return output'`,
+        { encoding: 'utf-8', timeout: 5000 }
+      ).trim().split('\n').filter(Boolean);
+      res.json({ apps: names });
+    } catch {
+      res.json({ apps: [] });
+    }
+  });
 
   // Adaptive quality state
   let currentQuality = captureOptions.quality;
@@ -194,7 +224,6 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
             type: 'screen-info',
             width: screenshotSize.width,
             height: screenshotSize.height,
-            spaces: spaceCount,
           }));
 
           // Start streaming
@@ -240,9 +269,15 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
             captureSession.updateFps(msg.fps);
           }
           break;
-        case 'switch-space':
-          if (msg.n >= 1 && msg.n <= 9) {
-            switchToSpace(msg.n);
+        case 'activate-app':
+          if (msg.name && typeof msg.name === 'string') {
+            // Sanitize app name to prevent injection
+            const safe = msg.name.replace(/[^a-zA-Z0-9 \-_.가-힣]/g, '');
+            try {
+              execSync(`osascript -e 'tell application "${safe}" to activate'`, {
+                stdio: 'ignore', timeout: 3000,
+              });
+            } catch { /* ignore */ }
           }
           break;
       }
