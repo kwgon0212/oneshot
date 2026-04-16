@@ -10,7 +10,7 @@ import { App, type Config } from './cli/App.js';
 import { checkPermissions } from './permission-check.js';
 import { createServer } from './server.js';
 import { startTunnel, type TunnelResult } from './tunnel.js';
-import { ensureMacHelper, getBrightness, setBrightness } from './input-handler.js';
+import { ensureMacHelper, dimDisplay, restoreDisplay } from './input-handler.js';
 
 function waitForUrl(url: string, maxRetries = 15): Promise<void> {
   return new Promise((resolve) => {
@@ -42,16 +42,12 @@ async function startServer(config: Config): Promise<void> {
 
   await checkPermissions();
 
-  // Headless mode: caffeinate + brightness 0
   let caffeinateProc: ChildProcess | null = null;
-  let originalBrightness = -1;
 
   if (isMac && headless) {
     ensureMacHelper();
-    originalBrightness = getBrightness();
     caffeinateProc = spawn('caffeinate', ['-d', '-i', '-s'], { stdio: 'ignore', detached: false });
     console.log('☕ caffeinate 시작 (디스플레이 sleep 방지)');
-    // 밝기는 URL 출력 후에 내림
   }
 
   const server = await createServer({
@@ -68,8 +64,7 @@ async function startServer(config: Config): Promise<void> {
     tunnel = await startTunnel(port);
   } catch (err: any) {
     console.error(`❌ 터널 연결 실패: ${err.message}`);
-    // Restore brightness on failure
-    if (isMac && originalBrightness >= 0) setBrightness(originalBrightness);
+    if (isMac && headless) restoreDisplay();
     if (caffeinateProc) caffeinateProc.kill();
     server.close();
     process.exit(1);
@@ -102,9 +97,9 @@ async function startServer(config: Config): Promise<void> {
 
   const shutdown = () => {
     console.log('\n🛑 종료 중...');
-    if (isMac && headless && originalBrightness >= 0) {
-      setBrightness(originalBrightness);
-      console.log(`💡 밝기 복원: ${Math.round(originalBrightness * 100)}%`);
+    if (isMac && headless) {
+      restoreDisplay();
+      console.log('💡 밝기 복원');
     }
     if (caffeinateProc) {
       caffeinateProc.kill();
@@ -118,18 +113,17 @@ async function startServer(config: Config): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  // 헤드리스: 유저가 Enter 누르면 밝기 0
-  if (isMac && headless && originalBrightness >= 0) {
+  // 헤드리스: 유저가 Enter 누르면 밝기 스르륵 내림
+  if (isMac && headless) {
     console.log('');
-    console.log('💡 Enter 를 누르면 디스플레이가 꺼집니다.');
-    console.log('   (아무 키 → 복원, 다시 Enter → 끔)');
+    console.log('💡 Enter → 화면 끔 | 아무 키 → 복원 | Ctrl+C → 종료');
 
     await new Promise<void>(resolve => {
       process.stdin.resume();
       process.stdin.once('data', () => resolve());
     });
 
-    setBrightness(0);
+    dimDisplay();
     console.log('🌑 디스플레이 꺼짐');
 
     let dimmed = true;
@@ -138,11 +132,11 @@ async function startServer(config: Config): Promise<void> {
     process.stdin.on('data', (data) => {
       if (data[0] === 3) { shutdown(); return; }
       if (dimmed) {
-        setBrightness(originalBrightness);
-        console.log(`💡 밝기 복원 (아무 키 → 다시 끔)`);
+        restoreDisplay();
+        console.log('💡 밝기 복원');
         dimmed = false;
       } else {
-        setBrightness(0);
+        dimDisplay();
         console.log('🌑 디스플레이 꺼짐');
         dimmed = true;
       }

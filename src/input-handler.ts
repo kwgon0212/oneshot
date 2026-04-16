@@ -214,15 +214,20 @@ int main(int argc, char *argv[]) {
         }
     }
     else if (strcmp(argv[1], "brightness") == 0 && argc >= 3) {
-        // Get/set display brightness via CoreDisplay private API
-        extern double CoreDisplay_Display_GetUserBrightness(CGDirectDisplayID id);
-        extern void CoreDisplay_Display_SetUserBrightness(CGDirectDisplayID id, double val);
-        CGDirectDisplayID did = CGMainDisplayID();
-        if (strcmp(argv[2], "get") == 0) {
-            printf("%.3f\\n", CoreDisplay_Display_GetUserBrightness(did));
-        } else {
-            double val = atof(argv[2]);
-            CoreDisplay_Display_SetUserBrightness(did, val);
+        // Control brightness via keyboard key simulation
+        // 144 = brightness up key, 145 = brightness down key
+        int steps = atoi(argv[2]);
+        CGKeyCode keyCode = steps > 0 ? 144 : 145;
+        int count = abs(steps);
+        int delay = (argc >= 4) ? atoi(argv[3]) : 30000; // microseconds between steps
+        for (int i = 0; i < count; i++) {
+            CGEventRef down = CGEventCreateKeyboardEvent(NULL, keyCode, true);
+            CGEventPost(kCGHIDEventTap, down);
+            CFRelease(down);
+            CGEventRef up = CGEventCreateKeyboardEvent(NULL, keyCode, false);
+            CGEventPost(kCGHIDEventTap, up);
+            CFRelease(up);
+            if (i < count - 1) usleep(delay);
         }
         return 0;
     }
@@ -326,13 +331,19 @@ function macHelperSync(args: string[]): string {
 }
 
 
-export function getBrightness(): number {
-  const out = macHelperSync(['brightness', 'get']);
-  return out ? parseFloat(out) : -1;
+// steps: 양수 = 밝기 올리기, 음수 = 내리기. delay = 단계 사이 ms (스르륵 효과)
+export function adjustBrightness(steps: number, delayMs = 30): void {
+  macHelperSync(['brightness', String(steps), String(delayMs * 1000)]);
 }
 
-export function setBrightness(val: number): void {
-  macHelperSync(['brightness', String(Math.max(0, Math.min(1, val)))]);
+// 밝기 최소로 (16단계 다운, 스르륵)
+export function dimDisplay(smooth = true): void {
+  adjustBrightness(-20, smooth ? 40 : 5);
+}
+
+// 밝기 최대로 복원 (16단계 업, 스르륵)
+export function restoreDisplay(smooth = true): void {
+  adjustBrightness(20, smooth ? 40 : 5);
 }
 
 export function getDisplayBounds(index: number): { x: number; y: number; w: number; h: number } | null {
