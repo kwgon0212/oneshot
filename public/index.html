@@ -374,8 +374,7 @@
         var el=document.createElement('div');
         el.className='app-item';
         el.textContent=name;
-        el.onclick=el.ontouchstart=function(e){
-          e.preventDefault();e.stopPropagation();
+        el.onclick=function(){
           si({type:'activate-app',name:name});
           appList.classList.remove('show');
         };
