@@ -276,12 +276,14 @@ html,body{height:100%;overflow:hidden;touch-action:none;background:var(--bg);col
   // WebSocket
   function startWs(){
     ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host);
+    ws.binaryType='blob';
     ws.onopen=function(){reconN=0;ovRecon.classList.remove('show');ws.send(JSON.stringify({type:'auth',token:token}));};
     ws.onmessage=function(ev){
+      // Binary = JPEG frame, Text = JSON control message
+      if(ev.data instanceof Blob){renderFrame(ev.data);return;}
       var m;try{m=JSON.parse(ev.data);}catch(e){return;}
       if(m.type==='auth-fail'){token=null;login.style.display='flex';stream.style.display='none';errEl.textContent='세션 만료';errEl.style.display='block';goBtn.disabled=false;}
       else if(m.type==='screen-info'){sW=m.width;sH=m.height;cvs.width=m.width;cvs.height=m.height;}
-      else if(m.type==='frame'){renderFrame(m.data);}
       else if(m.type==='quality-adjust'){document.getElementById('d-q').textContent=m.quality;}
       else if(m.type==='system-stats'){
         document.getElementById('d-cpu').textContent=m.cpuPercent;
@@ -298,10 +300,19 @@ html,body{height:100%;overflow:hidden;touch-action:none;background:var(--bg);col
     setTimeout(startWs,3000);
   }
 
-  // Render
+  // Render — binary Blob → ObjectURL → Image → Canvas
   var img=new Image();
-  img.onload=function(){ctx.drawImage(img,0,0,cvs.width,cvs.height);fCount++;var n=Date.now();if(n-fpsT>=1000){document.getElementById('d-fps').textContent=fCount;fCount=0;fpsT=n;}};
-  function renderFrame(b64){img.src='data:image/jpeg;base64,'+b64;}
+  var prevUrl=null;
+  img.onload=function(){
+    ctx.drawImage(img,0,0,cvs.width,cvs.height);
+    if(prevUrl)URL.revokeObjectURL(prevUrl);
+    prevUrl=img.src;
+    fCount++;var n=Date.now();if(n-fpsT>=1000){document.getElementById('d-fps').textContent=fCount;fCount=0;fpsT=n;}
+  };
+  function renderFrame(blob){
+    var url=URL.createObjectURL(blob);
+    img.src=url;
+  }
 
   // Helpers
   function ratio(e){

@@ -35,16 +35,17 @@ export async function listDisplays(): Promise<DisplayInfo[]> {
 
 export async function captureFrame(quality: number, scale: number): Promise<Buffer> {
   const opts: any = { format: 'png' };
-  if (currentDisplayId) opts.screen = currentDisplayId;
+  if (currentDisplayId !== undefined) opts.screen = currentDisplayId;
   const imgBuffer = await screenshot(opts) as Buffer;
-  const metadata = await sharp(imgBuffer).metadata();
-  const width = Math.round((metadata.width || 1920) * scale);
-  const height = Math.round((metadata.height || 1080) * scale);
 
-  return sharp(imgBuffer)
-    .resize(width, height)
-    .jpeg({ quality })
-    .toBuffer();
+  const pipe = sharp(imgBuffer);
+  if (scale < 0.99) {
+    const metadata = await sharp(imgBuffer).metadata();
+    const width = Math.round((metadata.width || 1920) * scale);
+    const height = Math.round((metadata.height || 1080) * scale);
+    pipe.resize(width, height);
+  }
+  return pipe.jpeg({ quality, chromaSubsampling: '4:2:0' }).toBuffer();
 }
 
 export async function getScreenSize(displayId?: string): Promise<{ width: number; height: number }> {

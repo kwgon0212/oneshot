@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from 'child_process';
+import { execSync, execFile, execFileSync } from 'child_process';
 import { existsSync, writeFileSync, mkdirSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { homedir, platform } from 'os';
@@ -248,42 +248,37 @@ export function ensureMacHelper(): void {
 
 function macHelper(args: string[]): void {
   if (!helperReady) return;
+  // Async — don't block the event loop for input commands
+  execFile(HELPER_PATH, args, { timeout: 2000 }, () => {});
+}
+
+function macHelperSync(args: string[]): string {
+  if (!helperReady) return '';
   try {
-    execFileSync(HELPER_PATH, args, { stdio: 'ignore', timeout: 2000 });
-  } catch {
-    // best effort
-  }
+    return execFileSync(HELPER_PATH, args, { encoding: 'utf-8', timeout: 2000 }).trim();
+  } catch { return ''; }
 }
 
 
 export function getDisplayBounds(index: number): { x: number; y: number; w: number; h: number } | null {
-  if (!helperReady) return null;
-  try {
-    const out = execFileSync(HELPER_PATH, ['display-bounds', String(index)], { encoding: 'utf-8', timeout: 2000 }).trim();
-    const parts = out.split(' ').map(Number);
-    if (parts.length >= 4) return { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
-  } catch { /* ignore */ }
+  const out = macHelperSync(['display-bounds', String(index)]);
+  if (!out) return null;
+  const parts = out.split(' ').map(Number);
+  if (parts.length >= 4) return { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
   return null;
 }
 
 export function getDisplayForPoint(x: number, y: number): number {
-  if (!helperReady) return -1;
-  try {
-    const out = execFileSync(HELPER_PATH, ['display-for-point', String(x), String(y)], { encoding: 'utf-8', timeout: 2000 }).trim();
-    return parseInt(out, 10);
-  } catch { return -1; }
+  const out = macHelperSync(['display-for-point', String(x), String(y)]);
+  return out ? parseInt(out, 10) : -1;
 }
 
 // Returns main display size in POINTS (not pixels) for correct coordinate mapping
 export function getMainDisplayPoints(): { width: number; height: number } | null {
-  if (!helperReady) return null;
-  try {
-    const out = execFileSync(HELPER_PATH, ['info'], { encoding: 'utf-8', timeout: 2000 }).trim();
-    const parts = out.split(' ');
-    if (parts.length >= 2) {
-      return { width: parseInt(parts[0], 10), height: parseInt(parts[1], 10) };
-    }
-  } catch { /* ignore */ }
+  const out = macHelperSync(['info']);
+  if (!out) return null;
+  const parts = out.split(' ');
+  if (parts.length >= 2) return { width: parseInt(parts[0], 10), height: parseInt(parts[1], 10) };
   return null;
 }
 

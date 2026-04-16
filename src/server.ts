@@ -174,8 +174,8 @@ end tell`;
   function broadcastFrame(jpeg: Buffer): void {
     if (!activeClient || activeClient.readyState !== WebSocket.OPEN) return;
     const start = Date.now();
-    const base64 = jpeg.toString('base64');
-    activeClient.send(JSON.stringify({ type: 'frame', data: base64 }), () => {
+    // Send raw binary JPEG — no base64 encoding, 33% smaller, faster
+    activeClient.send(jpeg, { binary: true }, () => {
       const elapsed = Date.now() - start;
       if (elapsed > targetFrameTime * 1.5) {
         currentQuality = Math.max(20, currentQuality - 5);
