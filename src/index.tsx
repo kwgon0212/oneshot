@@ -48,15 +48,10 @@ async function startServer(config: Config): Promise<void> {
 
   if (isMac && headless) {
     ensureMacHelper();
-
     originalBrightness = getBrightness();
-    console.log(`💡 현재 밝기: ${Math.round(originalBrightness * 100)}%`);
-
     caffeinateProc = spawn('caffeinate', ['-d', '-i', '-s'], { stdio: 'ignore', detached: false });
     console.log('☕ caffeinate 시작 (디스플레이 sleep 방지)');
-
-    setBrightness(0);
-    console.log('🌑 디스플레이 밝기 → 0 (화면 꺼짐 효과)');
+    // 밝기는 URL 출력 후에 내림
   }
 
   const server = await createServer({
@@ -103,6 +98,15 @@ async function startServer(config: Config): Promise<void> {
     console.log(qr);
   });
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  // 헤드리스: 모든 출력 끝난 후 밝기 0
+  if (isMac && headless && originalBrightness >= 0) {
+    console.log(`💡 3초 후 디스플레이 밝기 → 0%`);
+    await new Promise(r => setTimeout(r, 3000));
+    setBrightness(0);
+    console.log('🌑 디스플레이 꺼짐');
+  }
+
   console.log('⌨️  Ctrl+C 로 종료');
 
   const shutdown = () => {
