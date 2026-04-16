@@ -1,4 +1,4 @@
-import { verifyPassword, createSessionToken, isValidToken } from './auth';
+import { verifyPassword, createSessionToken, isValidToken } from './auth.js';
 
 describe('verifyPassword', () => {
   it('returns true for matching password', () => {

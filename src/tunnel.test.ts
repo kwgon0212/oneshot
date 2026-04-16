@@ -1,4 +1,4 @@
-import { getCloudflaredDownloadUrl, parseCloudflareUrl } from './tunnel';
+import { getCloudflaredDownloadUrl, parseCloudflareUrl } from './tunnel.js';
 
 describe('getCloudflaredDownloadUrl', () => {
   it('returns correct URL for darwin arm64', () => {

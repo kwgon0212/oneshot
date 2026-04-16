@@ -2,7 +2,7 @@ import screenshot from 'screenshot-desktop';
 import sharp from 'sharp';
 import { spawn, ChildProcess } from 'child_process';
 import { platform } from 'os';
-import { HELPER_PATH } from './input-handler';
+import { HELPER_PATH } from './input-handler.js';
 
 export interface CaptureOptions {
   fps: number;

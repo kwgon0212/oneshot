@@ -92,7 +92,7 @@ async function downloadCloudflared(destPath: string): Promise<void> {
     await followRedirects(url, tgzPath);
     execSync(`tar -xzf "${tgzPath}" -C "${CLOUDFLARED_DIR}"`, { stdio: 'ignore' });
     try {
-      const { unlinkSync } = require('fs');
+      const { unlinkSync } = await import('fs');
       unlinkSync(tgzPath);
     } catch { /* ignore */ }
   } else {

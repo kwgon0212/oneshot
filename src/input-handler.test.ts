@@ -1,4 +1,4 @@
-import { ratioToAbsolute, isValidRatio } from './input-handler';
+import { ratioToAbsolute, isValidRatio } from './input-handler.js';
 
 describe('isValidRatio', () => {
   it('returns true for valid ratios', () => {

@@ -3,14 +3,19 @@ import http from 'http';
 import os from 'os';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
-import { verifyPassword, createSessionToken, isValidToken } from './auth';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { verifyPassword, createSessionToken, isValidToken } from './auth.js';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize, setScreenOffset,
   ensureMacHelper, getMainDisplayPoints, getDisplayForPoint, getDisplayBounds,
-} from './input-handler';
+} from './input-handler.js';
 import { execSync } from 'child_process';
-import { startCapture, getScreenSize, listDisplays, CaptureOptions, CaptureSession } from './capture';
+import { startCapture, getScreenSize, listDisplays, CaptureOptions, CaptureSession } from './capture.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 interface ServerOptions {
   port: number;
@@ -69,7 +74,7 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
   let captureSession: CaptureSession | null = null;
 
   app.use(express.json());
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  app.use(express.static(path.join(__dirname, 'public')));
 
   // Auth endpoint
   app.post('/auth', (req, res) => {
