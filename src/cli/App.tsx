@@ -109,20 +109,22 @@ export function App({ onStart }: Props) {
         )}
       </Box>
 
-      {/* Password */}
-      <Box>
-        <Text color={highlight('password') ? 'cyan' : undefined}>
-          {cursor('password')}{'비밀번호: '}
-        </Text>
-        {!passwordDone ? (
-          <PasswordInput
-            placeholder="비밀번호 입력 후 Enter"
-            onSubmit={handlePasswordSubmit}
-          />
-        ) : (
-          <Text>{'*'.repeat(password.length)}</Text>
-        )}
-      </Box>
+      {/* Password — only show after username is done */}
+      {usernameDone && (
+        <Box>
+          <Text color={highlight('password') ? 'cyan' : undefined}>
+            {cursor('password')}{'비밀번호: '}
+          </Text>
+          {!passwordDone ? (
+            <PasswordInput
+              placeholder="비밀번호 입력 후 Enter"
+              onSubmit={handlePasswordSubmit}
+            />
+          ) : (
+            <Text>{'*'.repeat(password.length)}</Text>
+          )}
+        </Box>
+      )}
 
       {/* Port */}
       <Box>
