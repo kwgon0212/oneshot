@@ -98,46 +98,11 @@ async function startServer(config: Config): Promise<void> {
     console.log(qr);
   });
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-  // 헤드리스: 유저가 Enter 누르면 밝기 0
-  if (isMac && headless && originalBrightness >= 0) {
-    console.log('');
-    console.log('💡 Enter 를 누르면 디스플레이가 꺼집니다.');
-    console.log('   (아무 키를 누르면 밝기가 복원됩니다)');
-    await new Promise<void>(resolve => {
-      process.stdin.setRawMode?.(false);
-      process.stdin.resume();
-      process.stdin.once('data', () => resolve());
-    });
-    setBrightness(0);
-    console.log('🌑 디스플레이 꺼짐 (아무 키 → 복원)');
-
-    // 아무 키 누르면 밝기 복원
-    process.stdin.setRawMode?.(true);
-    process.stdin.resume();
-    process.stdin.on('data', (data) => {
-      // Ctrl+C는 shutdown에서 처리
-      if (data[0] === 3) return;
-      if (originalBrightness >= 0) {
-        setBrightness(originalBrightness);
-        console.log(`💡 밝기 복원: ${Math.round(originalBrightness * 100)}%`);
-        console.log('   Enter 를 누르면 다시 꺼집니다.');
-        // 다음 Enter로 다시 끄기
-        process.stdin.once('data', (d) => {
-          if (d[0] === 3) return;
-          setBrightness(0);
-          console.log('🌑 디스플레이 꺼짐');
-        });
-      }
-    });
-  }
-
   console.log('⌨️  Ctrl+C 로 종료');
 
   const shutdown = () => {
     console.log('\n🛑 종료 중...');
-    // Restore brightness
-    if (isMac && originalBrightness >= 0) {
+    if (isMac && headless && originalBrightness >= 0) {
       setBrightness(originalBrightness);
       console.log(`💡 밝기 복원: ${Math.round(originalBrightness * 100)}%`);
     }
@@ -152,6 +117,37 @@ async function startServer(config: Config): Promise<void> {
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+
+  // 헤드리스: 유저가 Enter 누르면 밝기 0
+  if (isMac && headless && originalBrightness >= 0) {
+    console.log('');
+    console.log('💡 Enter 를 누르면 디스플레이가 꺼집니다.');
+    console.log('   (아무 키 → 복원, 다시 Enter → 끔)');
+
+    await new Promise<void>(resolve => {
+      process.stdin.resume();
+      process.stdin.once('data', () => resolve());
+    });
+
+    setBrightness(0);
+    console.log('🌑 디스플레이 꺼짐');
+
+    let dimmed = true;
+    if (process.stdin.setRawMode) process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on('data', (data) => {
+      if (data[0] === 3) { shutdown(); return; }
+      if (dimmed) {
+        setBrightness(originalBrightness);
+        console.log(`💡 밝기 복원 (아무 키 → 다시 끔)`);
+        dimmed = false;
+      } else {
+        setBrightness(0);
+        console.log('🌑 디스플레이 꺼짐');
+        dimmed = true;
+      }
+    });
+  }
 }
 
 // Parse flags from argv

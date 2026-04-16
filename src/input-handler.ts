@@ -332,7 +332,7 @@ export function getBrightness(): number {
 }
 
 export function setBrightness(val: number): void {
-  macHelper(['brightness', String(Math.max(0, Math.min(1, val)))]);
+  macHelperSync(['brightness', String(Math.max(0, Math.min(1, val)))]);
 }
 
 export function getDisplayBounds(index: number): { x: number; y: number; w: number; h: number } | null {
