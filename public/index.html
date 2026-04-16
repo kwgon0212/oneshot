@@ -160,7 +160,7 @@ html,body{height:100%;overflow:hidden;touch-action:none;background:var(--bg);col
 
   <!-- Info panel -->
   <div id="info-panel">
-    <div><span class="label">FPS </span><span class="val" id="d-fps">0</span> <span class="label" style="margin-left:12px;">품질 </span><span class="val" id="d-q">75</span></div>
+    <div><span class="label">FPS </span><span class="val" id="d-fps">0</span> <span class="label" style="margin-left:12px;">품질 </span><span class="val" id="d-q">75</span> <span class="label" style="margin-left:12px;">지연 </span><span class="val" id="d-ping">-</span><span class="label">ms</span></div>
     <div><span class="label">CPU </span><span class="val" id="d-cpu">-</span>% <span class="label" style="margin-left:12px;">MEM </span><span class="val" id="d-mem">-</span>% <span style="color:var(--text-dim);" id="d-memg"></span></div>
     <div><span class="label">FPS 조절 </span><input type="range" id="fps-sl" min="1" max="30" value="15"> <span class="val" id="fps-v">15</span></div>
   </div>
@@ -277,7 +277,12 @@ html,body{height:100%;overflow:hidden;touch-action:none;background:var(--bg);col
   function startWs(){
     ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host);
     ws.binaryType='blob';
-    ws.onopen=function(){reconN=0;ovRecon.classList.remove('show');ws.send(JSON.stringify({type:'auth',token:token}));};
+    ws.onopen=function(){
+      reconN=0;ovRecon.classList.remove('show');ws.send(JSON.stringify({type:'auth',token:token}));
+      // Ping every 2 seconds for latency measurement
+      if(ws._pingIv)clearInterval(ws._pingIv);
+      ws._pingIv=setInterval(function(){if(ws.readyState===1)ws.send(JSON.stringify({type:'ping',t:Date.now()}));},2000);
+    };
     ws.onmessage=function(ev){
       // Binary = JPEG frame, Text = JSON control message
       if(ev.data instanceof Blob){renderFrame(ev.data);return;}
@@ -285,6 +290,7 @@ html,body{height:100%;overflow:hidden;touch-action:none;background:var(--bg);col
       if(m.type==='auth-fail'){token=null;login.style.display='flex';stream.style.display='none';errEl.textContent='세션 만료';errEl.style.display='block';goBtn.disabled=false;}
       else if(m.type==='screen-info'){sW=m.width;sH=m.height;cvs.width=m.width;cvs.height=m.height;}
       else if(m.type==='quality-adjust'){document.getElementById('d-q').textContent=m.quality;}
+      else if(m.type==='pong'){document.getElementById('d-ping').textContent=Date.now()-m.t;}
       else if(m.type==='system-stats'){
         document.getElementById('d-cpu').textContent=m.cpuPercent;
         document.getElementById('d-mem').textContent=m.memPercent;
