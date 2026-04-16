@@ -15,133 +15,79 @@ interface ToolbarProps {
 
 type ModKey = 'ctrl' | 'alt' | 'meta' | 'shift';
 
+const MOD_LABELS: Record<ModKey, string> = {
+  ctrl: 'Ctrl', alt: 'Alt', meta: 'Cmd', shift: 'Shift',
+};
+
 const Toolbar: React.FC<ToolbarProps> = ({
-  show,
-  onKeyboard,
-  onApps,
-  onDisplay,
-  onRightClick,
-  onMissionControl,
-  onZoomReset,
-  rightClickMode,
-  showZoomReset,
+  show, onKeyboard, onApps, onDisplay, onRightClick,
+  onMissionControl, onZoomReset, rightClickMode, showZoomReset,
 }) => {
   const [mods, setMods] = useState<Record<ModKey, boolean>>({
-    ctrl: false,
-    alt: false,
-    meta: false,
-    shift: false,
+    ctrl: false, alt: false, meta: false, shift: false,
   });
+  const [mcActive, setMcActive] = useState(false);
 
   const getMods = useCallback((): string[] => {
-    const out: string[] = [];
-    if (mods.ctrl) out.push('ctrl');
-    if (mods.alt) out.push('alt');
-    if (mods.meta) out.push('meta');
-    if (mods.shift) out.push('shift');
-    return out;
+    return (Object.keys(mods) as ModKey[]).filter(k => mods[k]);
   }, [mods]);
 
   const clearMods = useCallback(() => {
     setMods({ ctrl: false, alt: false, meta: false, shift: false });
   }, []);
 
-  const sendKey = useCallback(
-    (key: string, extra?: string[]) => {
-      const m = getMods().concat(extra || []);
-      ws.send({ type: 'key-down', key, modifiers: m });
-      ws.send({ type: 'key-up', key });
-      clearMods();
-    },
-    [getMods, clearMods]
-  );
+  const sendKey = useCallback((key: string) => {
+    const m = getMods();
+    ws.send({ type: 'key-down', key, modifiers: m });
+    ws.send({ type: 'key-up', key });
+    clearMods();
+  }, [getMods, clearMods]);
 
-  const pressAnim = (e: React.MouseEvent | React.TouchEvent) => {
-    const btn = e.currentTarget as HTMLElement;
-    btn.classList.add('pressed');
-    setTimeout(() => btn.classList.remove('pressed'), 150);
+  const press = (el: HTMLElement) => {
+    el.classList.add('pressed');
+    setTimeout(() => el.classList.remove('pressed'), 150);
   };
 
-  const makeTbHandler = (fn: () => void) => (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    pressAnim(e);
+  // 일반 버튼 (누르면 실행, 토글 아님)
+  const action = (fn: () => void) => (e: React.MouseEvent) => {
+    press(e.currentTarget as HTMLElement);
     fn();
   };
 
-  const toggleMod = (mod: ModKey) => (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // 토글 버튼 (상태 유지)
+  const toggleMod = (mod: ModKey) => (e: React.MouseEvent) => {
+    press(e.currentTarget as HTMLElement);
     setMods(prev => ({ ...prev, [mod]: !prev[mod] }));
   };
 
-  const handleEsc = makeTbHandler(() => sendKey('Escape'));
+  const handleMC = (e: React.MouseEvent) => {
+    press(e.currentTarget as HTMLElement);
+    setMcActive(v => !v);
+    onMissionControl();
+  };
 
   return (
     <div id="toolbar" className={show ? 'show' : ''}>
       <div className="tb-row">
-        <button
-          className="tbtn"
-          onClick={makeTbHandler(onKeyboard)}
-          onTouchStart={makeTbHandler(onKeyboard)}
-        >
-          키보드
-        </button>
-        <button
-          className="tbtn"
-          onClick={makeTbHandler(onApps)}
-          onTouchStart={makeTbHandler(onApps)}
-        >
-          앱 전환
-        </button>
-        <button
-          className="tbtn"
-          onClick={makeTbHandler(onDisplay)}
-          onTouchStart={makeTbHandler(onDisplay)}
-        >
-          모니터
-        </button>
-        <button
-          className={`tbtn${rightClickMode ? ' on' : ''}`}
-          onClick={makeTbHandler(onRightClick)}
-          onTouchStart={makeTbHandler(onRightClick)}
-        >
-          우클릭
-        </button>
-        <button
-          className="tbtn"
-          onClick={makeTbHandler(onMissionControl)}
-          onTouchStart={makeTbHandler(onMissionControl)}
-        >
-          앱 보기
-        </button>
+        <button className="tbtn" onClick={action(onKeyboard)}>키보드</button>
+        <button className="tbtn" onClick={action(onApps)}>앱 전환</button>
+        <button className="tbtn" onClick={action(onDisplay)}>모니터</button>
+        <button className={`tbtn${rightClickMode ? ' on' : ''}`} onClick={action(onRightClick)}>우클릭</button>
+        <button className={`tbtn${mcActive ? ' on' : ''}`} onClick={handleMC}>앱 보기</button>
         {showZoomReset && (
-          <button
-            className="tbtn"
-            onClick={makeTbHandler(onZoomReset)}
-            onTouchStart={makeTbHandler(onZoomReset)}
-          >
-            줌 리셋
-          </button>
+          <button className="tbtn" onClick={action(onZoomReset)}>줌 리셋</button>
         )}
       </div>
       <div className="tb-row">
-        <button
-          className="tbtn tbtn-sm"
-          onClick={handleEsc}
-          onTouchStart={handleEsc}
-        >
-          ESC
-        </button>
+        <button className="tbtn tbtn-sm" onClick={action(() => sendKey('Escape'))}>ESC</button>
         <div className="tb-sep" />
-        {(['ctrl', 'alt', 'meta', 'shift'] as ModKey[]).map(mod => (
+        {(Object.keys(MOD_LABELS) as ModKey[]).map(mod => (
           <button
             key={mod}
             className={`tbtn tbtn-sm mod${mods[mod] ? ' on' : ''}`}
             onClick={toggleMod(mod)}
-            onTouchStart={toggleMod(mod)}
           >
-            {mod === 'meta' ? 'Cmd' : mod === 'ctrl' ? 'Ctrl' : mod === 'alt' ? 'Alt' : 'Shift'}
+            {MOD_LABELS[mod]}
           </button>
         ))}
       </div>
