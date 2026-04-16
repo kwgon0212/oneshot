@@ -30,7 +30,7 @@
   #top-bar > * { pointer-events: auto; }
   #shutdown-btn { background: rgba(180,40,40,0.8); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 600; }
   #shutdown-btn:hover { background: rgba(220,50,50,0.9); }
-  #status-bar { background: rgba(0,0,0,0.7); color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-family: monospace; display: none; }
+  #status-bar { background: rgba(0,0,0,0.85); color: #ccc; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-family: monospace; line-height: 1.6; }
   #toolbar-toggle { background: rgba(0,0,0,0.6); color: #ccc; border: 1px solid #555; border-radius: 6px; padding: 6px 10px; font-size: 16px; cursor: pointer; display: none; }
   #toolbar-toggle.active { background: #4a9eff; color: #fff; border-color: #4a9eff; }
 
@@ -46,14 +46,14 @@
   #confirm-no:hover { background: #555; }
 
   /* Mobile Toolbar */
-  #mobile-toolbar { display: none; background: #16213e; border-top: 1px solid #333; padding: 6px 8px; z-index: 50; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #mobile-toolbar { display: none; background: #222; border-top: 2px solid #4a9eff; padding: 8px; z-index: 50; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   #mobile-toolbar.visible { display: block; }
   #mobile-toolbar .toolbar-row { display: flex; gap: 6px; align-items: center; min-width: max-content; }
   #mobile-toolbar .toolbar-row + .toolbar-row { margin-top: 6px; }
-  .tb-btn { background: #2a2a4a; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; font-size: 13px; font-family: monospace; cursor: pointer; white-space: nowrap; flex-shrink: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
+  .tb-btn { background: #3a3a5a; color: #fff; border: 1px solid #666; border-radius: 8px; padding: 10px 14px; font-size: 14px; font-family: -apple-system, sans-serif; cursor: pointer; white-space: nowrap; flex-shrink: 0; -webkit-tap-highlight-color: transparent; user-select: none; font-weight: 500; }
   .tb-btn:active { background: #4a9eff; color: #fff; }
   .tb-btn.active { background: #4a9eff; color: #fff; border-color: #4a9eff; }
-  .tb-sep { width: 1px; height: 28px; background: #444; flex-shrink: 0; }
+  .tb-sep { width: 1px; height: 32px; background: #555; flex-shrink: 0; }
   #hidden-input { position: fixed; left: -9999px; top: -9999px; opacity: 0; width: 1px; height: 1px; }
 
   /* Reconnect Overlay */
@@ -87,8 +87,8 @@
     <button id="shutdown-btn">종료</button>
     <button id="toolbar-toggle">🛠</button>
     <div id="status-bar">
-      <span id="fps-display">0 FPS</span> |
-      <span id="quality-display">Q:75</span>
+      <div><span id="fps-display">0 FPS</span> | <span id="quality-display">Q:75</span></div>
+      <div>CPU <span id="cpu-display">-</span>% | MEM <span id="mem-display">-</span>%  <span id="mem-detail"></span></div>
     </div>
   </div>
 
@@ -151,7 +151,7 @@
   var MAX_RECONNECT = 10;
   var frameCount = 0;
   var lastFpsTime = Date.now();
-  var showStatus = false;
+  var showStatus = true;
   var toolbarVisible = false;
   var rightClickMode = false;
   var stickyMods = { ctrl: false, alt: false, meta: false, shift: false };
@@ -262,6 +262,12 @@
 
         case 'quality-adjust':
           qualityDisplay.textContent = 'Q:' + msg.quality;
+          break;
+
+        case 'system-stats':
+          document.getElementById('cpu-display').textContent = msg.cpuPercent;
+          document.getElementById('mem-display').textContent = msg.memPercent;
+          document.getElementById('mem-detail').textContent = '(' + msg.memUsedGB + '/' + msg.memTotalGB + 'GB)';
           break;
       }
     };

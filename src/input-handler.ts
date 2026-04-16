@@ -43,6 +43,15 @@ const HELPER_SOURCE = `
 int main(int argc, char *argv[]) {
     if (argc < 2) return 1;
 
+    if (strcmp(argv[1], "info") == 0) {
+        CGDirectDisplayID mainDisplay = CGMainDisplayID();
+        size_t pw = CGDisplayPixelsWide(mainDisplay);
+        size_t ph = CGDisplayPixelsHigh(mainDisplay);
+        CGRect bounds = CGDisplayBounds(mainDisplay);
+        printf("%d %d %d %d\\n", (int)bounds.size.width, (int)bounds.size.height, (int)pw, (int)ph);
+        return 0;
+    }
+
     if (strcmp(argv[1], "move") == 0 && argc >= 4) {
         CGEventRef e = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved,
             CGPointMake(atof(argv[2]), atof(argv[3])), kCGMouseButtonLeft);
@@ -120,6 +129,19 @@ function macHelper(args: string[]): void {
   } catch {
     // best effort
   }
+}
+
+// Returns main display size in POINTS (not pixels) for correct coordinate mapping
+export function getMainDisplayPoints(): { width: number; height: number } | null {
+  if (!helperReady) return null;
+  try {
+    const out = execFileSync(HELPER_PATH, ['info'], { encoding: 'utf-8', timeout: 2000 }).trim();
+    const parts = out.split(' ');
+    if (parts.length >= 2) {
+      return { width: parseInt(parts[0], 10), height: parseInt(parts[1], 10) };
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
 function exec(cmd: string): void {

@@ -1,12 +1,13 @@
 import express from 'express';
 import http from 'http';
+import os from 'os';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import { verifyPassword, createSessionToken, isValidToken } from './auth';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize,
-  ensureMacHelper,
+  ensureMacHelper, getMainDisplayPoints,
 } from './input-handler';
 import { startCapture, getScreenSize, CaptureOptions, CaptureSession } from './capture';
 
@@ -20,6 +21,26 @@ export interface ServerInstance {
   httpServer: http.Server;
   wss: WebSocketServer;
   close: () => void;
+}
+
+function getSystemStats() {
+  const cpus = os.cpus();
+  let totalIdle = 0, totalTick = 0;
+  for (const cpu of cpus) {
+    for (const type of Object.keys(cpu.times) as Array<keyof typeof cpu.times>) {
+      totalTick += cpu.times[type];
+    }
+    totalIdle += cpu.times.idle;
+  }
+  const cpuPercent = Math.round((1 - totalIdle / totalTick) * 100);
+
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const memPercent = Math.round(((totalMem - freeMem) / totalMem) * 100);
+  const memUsedGB = ((totalMem - freeMem) / 1073741824).toFixed(1);
+  const memTotalGB = (totalMem / 1073741824).toFixed(1);
+
+  return { cpuPercent, memPercent, memUsedGB, memTotalGB };
 }
 
 export async function createServer(options: ServerOptions): Promise<ServerInstance> {
@@ -57,7 +78,6 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
       return;
     }
     res.json({ ok: true });
-    // Give response time to send, then shutdown
     setTimeout(() => {
       console.log('\n🛑 웹에서 종료 요청됨. 종료 중...');
       process.exit(0);
@@ -69,14 +89,30 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
     ensureMacHelper();
   }
 
-  // Get screen size for coordinate mapping
-  const screenSize = await getScreenSize();
-  setScreenSize(screenSize.width, screenSize.height);
+  // Get screen size — use POINT dimensions for coordinate mapping (not pixels)
+  // On Retina displays, screenshot pixels != mouse coordinate points
+  const screenshotSize = await getScreenSize();
+  let displayWidth = screenshotSize.width;
+  let displayHeight = screenshotSize.height;
+
+  if (process.platform === 'darwin') {
+    const displayPoints = getMainDisplayPoints();
+    if (displayPoints) {
+      console.log(`📐 디스플레이: ${displayPoints.width}x${displayPoints.height} 포인트 (캡처: ${screenshotSize.width}x${screenshotSize.height} 픽셀)`);
+      displayWidth = displayPoints.width;
+      displayHeight = displayPoints.height;
+    }
+  }
+
+  setScreenSize(displayWidth, displayHeight);
 
   // Adaptive quality state
   let currentQuality = captureOptions.quality;
   let currentScale = captureOptions.scale;
   const targetFrameTime = 1000 / captureOptions.fps;
+
+  // System stats interval
+  let statsInterval: ReturnType<typeof setInterval> | null = null;
 
   function broadcastFrame(jpeg: Buffer): void {
     if (!activeClient || activeClient.readyState !== WebSocket.OPEN) return;
@@ -86,7 +122,6 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
     activeClient.send(JSON.stringify({ type: 'frame', data: base64 }), () => {
       const elapsed = Date.now() - start;
 
-      // Adaptive quality: if sending takes too long, reduce quality
       if (elapsed > targetFrameTime * 1.5) {
         currentQuality = Math.max(20, currentQuality - 5);
         currentScale = Math.max(0.3, currentScale - 0.05);
@@ -95,7 +130,6 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
           type: 'quality-adjust', quality: currentQuality, scale: currentScale,
         }));
       } else if (elapsed < targetFrameTime * 0.5) {
-        // Room to improve quality
         currentQuality = Math.min(captureOptions.quality, currentQuality + 2);
         currentScale = Math.min(captureOptions.scale, currentScale + 0.02);
         captureSession?.updateQuality(currentQuality, currentScale);
@@ -106,12 +140,25 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
   function startStreaming(): void {
     if (captureSession) return;
     captureSession = startCapture(captureOptions, broadcastFrame);
+
+    // Start sending system stats every 2 seconds
+    if (!statsInterval) {
+      statsInterval = setInterval(() => {
+        if (activeClient && activeClient.readyState === WebSocket.OPEN) {
+          activeClient.send(JSON.stringify({ type: 'system-stats', ...getSystemStats() }));
+        }
+      }, 2000);
+    }
   }
 
   function stopStreaming(): void {
     if (captureSession) {
       captureSession.stop();
       captureSession = null;
+    }
+    if (statsInterval) {
+      clearInterval(statsInterval);
+      statsInterval = null;
     }
   }
 
@@ -138,11 +185,11 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
           }
           activeClient = ws;
 
-          // Send screen info
+          // Send screen info (send screenshot pixel dimensions for canvas sizing)
           ws.send(JSON.stringify({
             type: 'screen-info',
-            width: screenSize.width,
-            height: screenSize.height,
+            width: screenshotSize.width,
+            height: screenshotSize.height,
           }));
 
           // Start streaming
@@ -190,7 +237,6 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
       if (ws === activeClient) {
         activeClient = null;
         stopStreaming();
-        // Reset quality for next connection
         currentQuality = captureOptions.quality;
         currentScale = captureOptions.scale;
       }
