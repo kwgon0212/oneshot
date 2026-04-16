@@ -125,6 +125,7 @@
     <button class="tb" id="tb-apps">앱 전환</button>
     <button class="tb" id="tb-disp">모니터</button>
     <button class="tb" id="tb-rc">우클릭</button>
+    <button class="tb" id="tb-mc">Mission Control</button>
     <button class="tb" id="tb-zreset">줌 리셋</button>
     <button class="tb" data-key="Escape">ESC</button>
     <button class="tb tb-sm mod" data-mod="ctrl">Ctrl</button>
@@ -392,6 +393,7 @@
 
   tbClick('tb-kb',function(){hinput.value='';hinput.focus();});
   tbClick('tb-rc',function(){rcMode=!rcMode;document.getElementById('tb-rc').classList.toggle('on',rcMode);});
+  tbClick('tb-mc',function(){si({type:'key-down',key:'F3',modifiers:[]});si({type:'key-up',key:'F3'});});
   tbClick('tb-zreset',function(){zoom=1;panX=0;panY=0;applyZoom();});
 
   // App switcher

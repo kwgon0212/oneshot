@@ -343,7 +343,7 @@ function macKeyTap(key: string, modifiers: string[]): void {
       'Backspace': 51, 'Delete': 117, 'Space': 49,
       'ArrowUp': 126, 'ArrowDown': 125, 'ArrowLeft': 123, 'ArrowRight': 124,
       'Home': 115, 'End': 119, 'PageUp': 116, 'PageDown': 121,
-      'F1': 122, 'F2': 120, 'F3': 99, 'F4': 118, 'F5': 96,
+      'F1': 122, 'F2': 120, 'F3': 160, 'F4': 118, 'F5': 96,
       'F6': 97, 'F7': 98, 'F8': 100, 'F9': 101, 'F10': 109,
       'F11': 103, 'F12': 111,
     };
