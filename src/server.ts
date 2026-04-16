@@ -285,6 +285,14 @@ end tell`;
         case 'mouse-scroll': handleMouseScroll(msg.x, msg.y, msg.deltaY || 0); break;
         case 'key-down': handleKeyDown(msg.key, msg.modifiers || []); break;
         case 'key-up': handleKeyUp(msg.key); break;
+        case 'type-text':
+          if (msg.text && typeof msg.text === 'string') {
+            // Direct unicode text input (Korean, etc.)
+            for (const ch of msg.text) {
+              handleKeyDown(ch, []);
+            }
+          }
+          break;
         case 'set-fps':
           if (msg.fps && captureSession) captureSession.updateFps(msg.fps);
           break;

@@ -36,6 +36,10 @@
   #zoom-badge { display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.75); color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 12px; z-index: 90; pointer-events: none; }
   #zoom-badge.show { display: block; }
 
+  /* Input preview toast */
+  #input-toast { position: fixed; bottom: 50%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #fff; padding: 8px 20px; border-radius: 10px; font-size: 18px; z-index: 300; pointer-events: none; opacity: 0; transition: opacity 0.3s; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); max-width: 80vw; text-align: center; word-break: break-all; }
+  #input-toast.show { opacity: 1; }
+
   /* Floating controls - top left */
   #ctrl-tl { position: fixed; top: 6px; left: 6px; z-index: 100; display: flex; gap: 6px; }
   .pill { background: rgba(0,0,0,0.75); color: #ccc; border: none; border-radius: 20px; padding: 5px 12px; font-size: 12px; font-family: monospace; cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); white-space: nowrap; }
@@ -102,6 +106,7 @@
   <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
   <div id="touch-dot"></div>
   <div id="zoom-badge"></div>
+  <div id="input-toast"></div>
 
   <div id="ctrl-tl">
     <button class="pill pill-red" id="btn-off">종료</button>
@@ -165,6 +170,7 @@
   var pwIn=document.getElementById('pw'), goBtn=document.getElementById('go'), errEl=document.getElementById('err');
   var cvs=document.getElementById('cvs'), ctx=cvs.getContext('2d');
   var touchDot=document.getElementById('touch-dot');
+  var inputToast=document.getElementById('input-toast');
   var zoomBadge=document.getElementById('zoom-badge');
   var cvsWrap=document.getElementById('cvs-wrap');
   var hinput=document.getElementById('hinput');
@@ -242,6 +248,16 @@
     touchDot.classList.add('show');touchDot.classList.remove('fade');
     clearTimeout(dotTimer);
     dotTimer=setTimeout(function(){touchDot.classList.add('fade');setTimeout(function(){touchDot.classList.remove('show','fade');},300);},500);
+  }
+
+  // Input toast
+  var toastTimer, toastBuf='';
+  function showToast(text){
+    toastBuf+=text;
+    inputToast.textContent=toastBuf;
+    inputToast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){inputToast.classList.remove('show');toastBuf='';},1500);
   }
 
   // Zoom/pan — canvas always keeps object-fit:contain, only transform changes
@@ -478,10 +494,18 @@
 
   // Hidden input
   hinput.addEventListener('input',function(){
-    var v=hinput.value;if(v.length>0){for(var i=0;i<v.length;i++)sKey(v[i]);hinput.value='';}
+    var v=hinput.value;
+    if(v.length>0){
+      si({type:'type-text',text:v});
+      showToast(v);
+      hinput.value='';
+    }
   });
   hinput.addEventListener('keydown',function(e){
-    if(['Backspace','Enter','Tab','Escape'].indexOf(e.key)>=0){e.preventDefault();sKey(e.key);}
+    if(e.key==='Backspace'){e.preventDefault();sKey('Backspace');showToast('[BS]');}
+    else if(e.key==='Enter'){e.preventDefault();sKey('Enter');showToast('[Enter]');}
+    else if(e.key==='Tab'){e.preventDefault();sKey('Tab');}
+    else if(e.key==='Escape'){e.preventDefault();sKey('Escape');}
   });
 
   // FPS

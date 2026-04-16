@@ -192,6 +192,27 @@ int main(int argc, char *argv[]) {
         CGEventRef e = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 1, atoi(argv[2]));
         CGEventPost(kCGHIDEventTap, e); CFRelease(e);
     }
+    else if (strcmp(argv[1], "type") == 0 && argc >= 3) {
+        // Type unicode string (supports Korean, Japanese, emoji, etc.)
+        CFStringRef str = CFStringCreateWithCString(NULL, argv[2], kCFStringEncodingUTF8);
+        if (str) {
+            CFIndex len = CFStringGetLength(str);
+            UniChar *chars = (UniChar *)malloc(len * sizeof(UniChar));
+            CFStringGetCharacters(str, CFRangeMake(0, len), chars);
+            for (CFIndex i = 0; i < len; i++) {
+                CGEventRef down = CGEventCreateKeyboardEvent(NULL, 0, true);
+                CGEventKeyboardSetUnicodeString(down, 1, &chars[i]);
+                CGEventPost(kCGHIDEventTap, down);
+                CFRelease(down);
+                CGEventRef up = CGEventCreateKeyboardEvent(NULL, 0, false);
+                CGEventPost(kCGHIDEventTap, up);
+                CFRelease(up);
+                usleep(5000);
+            }
+            free(chars);
+            CFRelease(str);
+        }
+    }
     return 0;
 }
 `;
@@ -296,7 +317,17 @@ function macScroll(deltaY: number): void {
   macHelper(['scroll', String(Math.round(deltaY))]);
 }
 
+function macTypeString(str: string): void {
+  macHelper(['type', str]);
+}
+
 function macKeyTap(key: string, modifiers: string[]): void {
+  // For single characters without modifiers, use CGEvent unicode typing (supports Korean etc.)
+  if (key.length === 1 && modifiers.length === 0) {
+    macTypeString(key);
+    return;
+  }
+
   let modStr = '';
   if (modifiers.includes('shift')) modStr += ' using shift down';
   if (modifiers.includes('ctrl') || modifiers.includes('control')) modStr += ' using control down';
@@ -304,6 +335,7 @@ function macKeyTap(key: string, modifiers: string[]): void {
   if (modifiers.includes('meta') || modifiers.includes('command')) modStr += ' using command down';
 
   if (key.length === 1) {
+    // Single char with modifiers — use osascript keystroke
     exec(`osascript -e 'tell application "System Events" to keystroke "${key}"${modStr}'`);
   } else {
     const keyCodeMap: Record<string, number> = {
