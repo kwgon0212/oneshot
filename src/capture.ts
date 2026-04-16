@@ -10,6 +10,7 @@ export interface CaptureOptions {
 export interface CaptureSession {
   stop: () => void;
   updateQuality: (quality: number, scale: number) => void;
+  updateFps: (fps: number) => void;
 }
 
 export async function captureFrame(quality: number, scale: number): Promise<Buffer> {
@@ -40,7 +41,7 @@ export function startCapture(
   let running = true;
   let currentQuality = options.quality;
   let currentScale = options.scale;
-  const interval = 1000 / options.fps;
+  let currentInterval = 1000 / options.fps;
 
   const loop = async () => {
     while (running) {
@@ -52,7 +53,7 @@ export function startCapture(
         // Skip frame on capture error
       }
       const elapsed = Date.now() - start;
-      const wait = Math.max(0, interval - elapsed);
+      const wait = Math.max(0, currentInterval - elapsed);
       if (wait > 0 && running) {
         await new Promise((r) => setTimeout(r, wait));
       }
@@ -66,6 +67,9 @@ export function startCapture(
     updateQuality: (quality: number, scale: number) => {
       currentQuality = quality;
       currentScale = scale;
+    },
+    updateFps: (fps: number) => {
+      currentInterval = 1000 / Math.max(1, Math.min(30, fps));
     },
   };
 }

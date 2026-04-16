@@ -230,6 +230,11 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
         case 'key-up':
           handleKeyUp(msg.key);
           break;
+        case 'set-fps':
+          if (msg.fps && captureSession) {
+            captureSession.updateFps(msg.fps);
+          }
+          break;
       }
     });
 

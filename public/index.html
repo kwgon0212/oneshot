@@ -89,6 +89,7 @@
     <div id="status-bar">
       <div><span id="fps-display">0 FPS</span> | <span id="quality-display">Q:75</span></div>
       <div>CPU <span id="cpu-display">-</span>% | MEM <span id="mem-display">-</span>%  <span id="mem-detail"></span></div>
+      <div style="margin-top:4px;">FPS <input type="range" id="fps-slider" min="1" max="30" value="15" style="width:80px;vertical-align:middle;"> <span id="fps-target">15</span></div>
     </div>
   </div>
 
@@ -310,11 +311,30 @@
   }
 
   // --- Input Helpers ---
+  // Calculate ratio within the actual rendered image area (excluding black bars from object-fit:contain)
   function getCanvasRatio(e) {
     var rect = canvas.getBoundingClientRect();
+    var canvasAspect = canvas.width / canvas.height;
+    var rectAspect = rect.width / rect.height;
+    var renderW, renderH, offX, offY;
+
+    if (canvasAspect > rectAspect) {
+      // wider than container — black bars top/bottom
+      renderW = rect.width;
+      renderH = rect.width / canvasAspect;
+      offX = 0;
+      offY = (rect.height - renderH) / 2;
+    } else {
+      // taller than container — black bars left/right
+      renderH = rect.height;
+      renderW = rect.height * canvasAspect;
+      offX = (rect.width - renderW) / 2;
+      offY = 0;
+    }
+
     return {
-      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
-      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left - offX) / renderW)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top - offY) / renderH)),
     };
   }
 
@@ -609,6 +629,14 @@
     }
     btn.addEventListener('click', handler);
     btn.addEventListener('touchstart', handler);
+  });
+
+  // --- FPS Slider ---
+  var fpsSlider = document.getElementById('fps-slider');
+  var fpsTarget = document.getElementById('fps-target');
+  fpsSlider.addEventListener('input', function() {
+    fpsTarget.textContent = fpsSlider.value;
+    sendInput({ type: 'set-fps', fps: parseInt(fpsSlider.value, 10) });
   });
 
   // --- Shutdown ---
