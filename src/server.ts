@@ -7,7 +7,7 @@ import { verifyPassword, createSessionToken, isValidToken } from './auth';
 import {
   handleMouseMove, handleMouseClick, handleMouseDown, handleMouseUp,
   handleMouseScroll, handleKeyDown, handleKeyUp, setScreenSize,
-  ensureMacHelper, getMainDisplayPoints, getSpaceCount,
+  ensureMacHelper, getMainDisplayPoints, getSpaceCount, switchToSpace,
 } from './input-handler';
 import { startCapture, getScreenSize, CaptureOptions, CaptureSession } from './capture';
 
@@ -242,8 +242,7 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
           break;
         case 'switch-space':
           if (msg.n >= 1 && msg.n <= 9) {
-            // Ctrl+Number to switch desktop (macOS keyboard shortcut)
-            handleKeyDown(String(msg.n), ['ctrl']);
+            switchToSpace(msg.n);
           }
           break;
       }

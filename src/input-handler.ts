@@ -44,6 +44,7 @@ const HELPER_SOURCE = `
 typedef int CGSConnectionID;
 extern CGSConnectionID _CGSDefaultConnection(void);
 extern CFArrayRef CGSCopyManagedDisplaySpaces(CGSConnectionID cid);
+extern void CGSManagedDisplaySetCurrentSpace(CGSConnectionID cid, CFStringRef displayUUID, uint64_t spaceID);
 
 int main(int argc, char *argv[]) {
     if (argc < 2) return 1;
@@ -78,6 +79,39 @@ int main(int argc, char *argv[]) {
         }
         CFRelease(displays);
         printf("%d\\n", total);
+        return 0;
+    }
+
+    if (strcmp(argv[1], "switch") == 0 && argc >= 3) {
+        int target = atoi(argv[2]) - 1;
+        CGSConnectionID cid = _CGSDefaultConnection();
+        CFArrayRef displays = CGSCopyManagedDisplaySpaces(cid);
+        if (!displays) return 1;
+
+        CFDictionaryRef disp = (CFDictionaryRef)CFArrayGetValueAtIndex(displays, 0);
+        CFStringRef displayID = (CFStringRef)CFDictionaryGetValue(disp, CFSTR("Display Identifier"));
+        CFArrayRef spaces = (CFArrayRef)CFDictionaryGetValue(disp, CFSTR("Spaces"));
+        if (!spaces || !displayID) { CFRelease(displays); return 1; }
+
+        int idx = 0;
+        for (CFIndex j = 0; j < CFArrayGetCount(spaces); j++) {
+            CFDictionaryRef space = (CFDictionaryRef)CFArrayGetValueAtIndex(spaces, j);
+            CFNumberRef typeRef = (CFNumberRef)CFDictionaryGetValue(space, CFSTR("type"));
+            int type = 0;
+            if (typeRef) CFNumberGetValue(typeRef, kCFNumberIntType, &type);
+            if (type == 0) {
+                if (idx == target) {
+                    CFNumberRef idRef = (CFNumberRef)CFDictionaryGetValue(space, CFSTR("ManagedSpaceID"));
+                    if (!idRef) idRef = (CFNumberRef)CFDictionaryGetValue(space, CFSTR("id64"));
+                    uint64_t spaceID = 0;
+                    if (idRef) CFNumberGetValue(idRef, kCFNumberSInt64Type, &spaceID);
+                    if (spaceID) CGSManagedDisplaySetCurrentSpace(cid, displayID, spaceID);
+                    break;
+                }
+                idx++;
+            }
+        }
+        CFRelease(displays);
         return 0;
     }
 
@@ -158,6 +192,13 @@ function macHelper(args: string[]): void {
   } catch {
     // best effort
   }
+}
+
+export function switchToSpace(n: number): void {
+  if (!helperReady) return;
+  try {
+    execFileSync(HELPER_PATH, ['switch', String(n)], { stdio: 'ignore', timeout: 2000 });
+  } catch { /* ignore */ }
 }
 
 export function getSpaceCount(): number {
